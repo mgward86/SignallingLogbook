@@ -7,6 +7,7 @@ import { Edit2, Trash2, Search, MapPin, Wrench, Briefcase, Plus, Download, FileS
 import { motion, AnimatePresence } from 'motion/react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { downloadPdf, sharePdf } from '../lib/pdfExport';
 import { format } from 'date-fns';
 import { SupervisorVerificationModal } from './SupervisorVerificationModal';
 import { SupervisorPortalModal } from './SupervisorPortalModal';
@@ -117,28 +118,14 @@ export function LogList({ onEdit, onDuplicate }: LogListProps) {
       const doc = createPdfInstance();
       generateLogPage(doc, log, true);
       addDocumentFooters(doc);
-      const pdfBlob = doc.output('blob');
       const filename = `Signalling_Log_${log.logNumber}.pdf`;
-      const file = new File([pdfBlob], filename, { type: 'application/pdf' });
 
-      const shareData = {
-        files: [file],
+      const shared = await sharePdf(doc, filename, {
         title: `Rail Log Entry: ${log.logNumber}`,
         text: `Please find attached the Rail Log Entry summary for ${log.logNumber}.`,
-      };
+      });
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share(shareData);
-        } catch (shareError: any) {
-          // If the user cancelled the share, we don't want to show an error alert
-          if (shareError.name === 'AbortError' || shareError.name === 'NotAllowedError') {
-            console.log('Share was cancelled by user');
-            return;
-          }
-          throw shareError; // Rethrow other errors to be caught by the outer catch
-        }
-      } else {
+      if (!shared) {
         // Fallback to mailto if sharing is not supported
         const subject = `Rail Log Entry: ${log.logNumber}`;
         const body = `Rail Log Entry Summary:
@@ -1290,11 +1277,11 @@ Sent from Rail Logbook App`;
     }
   };
 
-  const handleExportPDF = (log: LogEntry) => {
+  const handleExportPDF = async (log: LogEntry) => {
     const doc = createPdfInstance();
     generateLogPage(doc, log, true);
     addDocumentFooters(doc, log.logNumber);
-    doc.save(`Signalling_Log_${log.logNumber}.pdf`);
+    await downloadPdf(doc, `Signalling_Log_${log.logNumber}.pdf`);
   };
 
   const handleShareBulk = async () => {
@@ -1306,28 +1293,14 @@ Sent from Rail Logbook App`;
         generateLogPage(doc, log, index === 0);
       });
       addDocumentFooters(doc);
-      
-      const pdfBlob = doc.output('blob');
-      const filename = `Bulk_Signalling_Logs_${format(new Date(), 'yyyyMMdd')}.pdf`;
-      const file = new File([pdfBlob], filename, { type: 'application/pdf' });
 
-      const shareData = {
-        files: [file],
+      const filename = `Bulk_Signalling_Logs_${format(new Date(), 'yyyyMMdd')}.pdf`;
+      const shared = await sharePdf(doc, filename, {
         title: `Rail Logbook: ${selectedEntries.length} Entries`,
         text: `Please find attached the bulk export of ${selectedEntries.length} log entries.`,
-      };
+      });
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share(shareData);
-        } catch (shareError: any) {
-          if (shareError.name === 'AbortError' || shareError.name === 'NotAllowedError') {
-            setExportStep('none');
-            return;
-          }
-          throw shareError;
-        }
-      } else {
+      if (!shared) {
         const subject = `Rail Logbook Export: ${selectedEntries.length} Entries`;
         const body = `Bulk Export Summary:
 Entries Selected: ${selectedEntries.length}
@@ -1352,7 +1325,7 @@ Sent from Rail Logbook App`;
     }
   };
 
-  const handleBulkExport = () => {
+  const handleBulkExport = async () => {
     if (selectedLogs.size === 0) return;
     const doc = createPdfInstance();
     const selectedEntries = logs.filter(l => selectedLogs.has(l.id));
@@ -1360,7 +1333,7 @@ Sent from Rail Logbook App`;
       generateLogPage(doc, log, index === 0);
     });
     addDocumentFooters(doc);
-    doc.save(`Bulk_Signalling_Logs_${format(new Date(), 'yyyyMMdd')}.pdf`);
+    await downloadPdf(doc, `Bulk_Signalling_Logs_${format(new Date(), 'yyyyMMdd')}.pdf`);
     setExportStep('none');
   };
 

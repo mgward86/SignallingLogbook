@@ -106,6 +106,15 @@ Once you've done steps 1–3 above and have access to Android Studio and/or a Ma
 - Verified both `https://signallinglogbook.com` (200) and `https://www.signallinglogbook.com` (308 → apex) live.
 - **Follow-up still needed:** add `signallinglogbook.com` to Firebase Authentication's authorized domains list (Console → Authentication → Settings → Authorized domains) — otherwise `signInWithPopup` on the Web build will be blocked on the new custom domain. Not yet done.
 
+### ✅ Phase 3 — PDF/file export adaptation (this session)
+- **Problem:** `jspdf`'s `doc.save()` triggers a browser download, which does nothing useful inside a Capacitor native WebView sandbox; likewise the Web Share API (`navigator.share`) used for the app's "Share" buttons isn't reliably available natively.
+- Installed `@capacitor/filesystem@8.1.3` and `@capacitor/share@8.0.1` (matching the Capacitor 8 core version already in use).
+- Added `src/lib/pdfExport.ts` with two platform-aware helpers used by all four PDF export/share call sites in `LogList.tsx` (`handleExportPDF`, `handleBulkExport`, `handleEmailShare`, `handleShareBulk`):
+  - `downloadPdf(doc, filename)` — Web: unchanged `doc.save()`. Native: writes the PDF to the app's cache dir via `Filesystem.writeFile` (base64 from `doc.output('datauristring')`) and opens the native share sheet via `Share.share({ url })`, letting the user save it to Files/Drive/etc.
+  - `sharePdf(doc, filename, { title, text })` — Native: same cache-write + native share sheet. Web: unchanged `navigator.share`-with-files logic. Returns `false` only when sharing files isn't supported at all (old browsers), so callers keep their existing `mailto:` fallback for that case; a user-cancelled share (native or Web) is treated as "handled" — no fallback email is triggered.
+- Verified: `tsc --noEmit`, `vite build`, and `npx cap sync` all pass; sync output confirms both `android` and `ios` now list `@capacitor/filesystem@8.1.3` and `@capacitor/share@8.0.1` alongside the existing `@capacitor-firebase/authentication` plugin.
+- **Not yet done:** actual on-device verification (no Android Studio/SDK or Mac+Xcode on this machine) — ties into Phase 7.
+
 ### 🟡 Phase 0.5 — Developer account setup (in progress, this session)
 - **Google Play Console:** account created by the user. Walked through creating the app listing (name "Railway Signalling Logbook", free, English) and the "Set up your app" checklist (App access, Ads, Content ratings, Target audience, Data safety, Privacy policy URL, Store listing). **Important technical note:** Play Console cannot have a package name typed in manually — `com.mward.signallinglogbook` only gets bound the first time a signed `.aab` is uploaded to a release track (Internal testing). That upload requires Android Studio/SDK + a release keystore, neither of which exist on this machine yet — so the package-name "connection" itself is still outstanding, blocked on Android build tooling (ties into Phase 7/8).
 - **Apple Developer Program:** user hit `ITC.signin.error.invalidUser` ("Your Apple Account isn't enabled for App Store Connect") when trying to access App Store Connect. Diagnosed as: the Apple ID used isn't yet attached to a fully paid/processed Developer Program enrollment (enrollment either not started, still processing/awaiting identity verification, or a payment issue) — **not** a bug in this project. Directed the user to `developer.apple.com/account` to check real enrollment status and complete/retry enrollment if needed. **Still blocked — needs the user to resolve directly with Apple.**
@@ -123,9 +132,7 @@ Google Play Console account created + app listing walkthrough in progress. Apple
 
 ### 🟡 Phase 2 — Auth migration — **code done, see §6 above for manual console steps + testing still needed**
 
-### Phase 3 — PDF/file export adaptation
-**Problem:** `jspdf`'s `doc.save()` relies on browser download behavior, unreliable in a native WebView sandbox.
-**Plan:** generate PDF as base64 (`doc.output('datauristring')`), use `@capacitor/filesystem` to write it + `@capacitor/share` to let the user save/share it. Keep browser download for Web.
+### ✅ Phase 3 — PDF/file export adaptation — **code done, see §6 above; on-device verification still pending (Phase 7)**
 
 ### Phase 4 — Push notifications (OneSignal)
 **Key architecture point:** supervisors typically action verification links via their own browser (not the native app), so the notification trigger must be **server-side** — a Firestore `onUpdate` Cloud Function watching `verificationStatus` changes on `logEntries`, which looks up the technician's `oneSignalPlayerId` (already added to `UserProfile` in Phase 0) and calls the OneSignal REST API.
@@ -170,7 +177,7 @@ Google Play Console account created + app listing walkthrough in progress. Apple
 | 0.5. Developer accounts | deferred to user |
 | 1. Capacitor scaffolding | ✅ done |
 | 2. Auth migration | 🟡 code done — pending your Firebase Console setup + device testing |
-| 3. PDF/file export | 2–3 days |
+| 3. PDF/file export | ✅ code done — pending device testing |
 | 4. Push notifications | 3–4 days |
 | 5. Biometric app-lock | 1–2 days |
 | 6. Mobile UX polish | 3–5 days |
@@ -180,12 +187,12 @@ Google Play Console account created + app listing walkthrough in progress. Apple
 
 ## 8. Immediate next step
 
-Everything currently actionable on this machine without you is essentially done or blocked on you. Open items, roughly in priority order:
+Phase 3 is now done. Everything else currently actionable on this machine without you is essentially done or blocked on you. Open items, roughly in priority order:
 
 1. **You:** add Android/iOS apps in the Firebase Console + place `google-services.json` / `GoogleService-Info.plist` (Phase 2, §6) so native Google Sign-In can eventually be tested.
 2. **You:** add `signallinglogbook.com` to Firebase Auth's authorized domains (quick, unblocks Web sign-in on the custom domain).
 3. **You:** resolve the Apple Developer Program enrollment error at `developer.apple.com/account`, and keep progressing the Google Play Console app listing.
-4. **Me, next:** **Phase 3 (PDF/file export adaptation)** doesn't depend on any of the above and can proceed now.
+4. **Me, next:** **Phase 4 (push notifications / OneSignal)** doesn't depend on any of the above and can proceed now, though it will eventually need a OneSignal account (not urgent until the certificate-upload step) and, for real end-to-end testing, a Cloud Functions deploy + device access.
 5. Longer-term: Phase 7/8 (device testing, store submission) are blocked on Android Studio/SDK and a Mac+Xcode, neither present on this machine.
 
 A visual status board mapping all of this against a generic architecture diagram is at `BUILD_STATUS.html` (open directly in a browser) — regenerate/update it whenever a phase status changes materially.
