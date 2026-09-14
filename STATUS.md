@@ -54,7 +54,7 @@ Four options were evaluated (Capacitor wrap / PWA-only / Expo+react-native-web h
 | Gemini API key | Removed from client bundle (see §5 — turned out to be unused) |
 | V1 scope | **Full scope**: biometric app-lock AND push notifications both in v1 |
 | Push notification provider | **OneSignal** |
-| Apple Developer / Google Play accounts | Personal accounts — **not yet created, user is setting these up independently** |
+| Apple Developer / Google Play accounts | Personal accounts — **in progress, see §7 Phase 0.5** |
 
 ## 5. Environment & tooling set up this session
 
@@ -99,6 +99,18 @@ This machine had **no Git, Node.js, or Firebase CLI** and the repo only existed 
 
 Once you've done steps 1–3 above and have access to Android Studio and/or a Mac, this phase just needs testing/verification — no further code changes are expected unless testing surfaces an issue.
 
+### ✅ Web deployment — Vercel + custom domain (this session)
+- Discovered a Vercel project (`matt-ward1/signalling-logbook`) already existed for this app (likely auto-created by AI Studio's original "Publish" flow) and deployed the current `main` to production via `npx vercel --prod`.
+- Attached the custom domain `signallinglogbook.com` and `www.signallinglogbook.com`. DNS was already correctly pointed at Vercel (GoDaddy `A` record → `76.76.21.21`), so no propagation wait was needed.
+- Configured `www` → apex redirect (permanent, 308) via the Vercel project-domains API (`redirect`/`redirectStatusCode` fields) — more reliable than a `vercel.json` host-conditional redirect, which is known to be flaky over HTTPS.
+- Verified both `https://signallinglogbook.com` (200) and `https://www.signallinglogbook.com` (308 → apex) live.
+- **Follow-up still needed:** add `signallinglogbook.com` to Firebase Authentication's authorized domains list (Console → Authentication → Settings → Authorized domains) — otherwise `signInWithPopup` on the Web build will be blocked on the new custom domain. Not yet done.
+
+### 🟡 Phase 0.5 — Developer account setup (in progress, this session)
+- **Google Play Console:** account created by the user. Walked through creating the app listing (name "Railway Signalling Logbook", free, English) and the "Set up your app" checklist (App access, Ads, Content ratings, Target audience, Data safety, Privacy policy URL, Store listing). **Important technical note:** Play Console cannot have a package name typed in manually — `com.mward.signallinglogbook` only gets bound the first time a signed `.aab` is uploaded to a release track (Internal testing). That upload requires Android Studio/SDK + a release keystore, neither of which exist on this machine yet — so the package-name "connection" itself is still outstanding, blocked on Android build tooling (ties into Phase 7/8).
+- **Apple Developer Program:** user hit `ITC.signin.error.invalidUser` ("Your Apple Account isn't enabled for App Store Connect") when trying to access App Store Connect. Diagnosed as: the Apple ID used isn't yet attached to a fully paid/processed Developer Program enrollment (enrollment either not started, still processing/awaiting identity verification, or a payment issue) — **not** a bug in this project. Directed the user to `developer.apple.com/account` to check real enrollment status and complete/retry enrollment if needed. **Still blocked — needs the user to resolve directly with Apple.**
+- Along the way, also diagnosed and resolved a separate App Store Connect page-load issue (blank page, console full of ServiceWorker/JSON-parse/DOM errors) — root-caused to browser extension or corporate-network interference (not an Apple or project issue); resolved once the user tried an Incognito window.
+
 ### Known placeholders / follow-ups from completed phases
 - `resources/icon.png` / `resources/splash.png` are functional placeholders — replace with real branding and re-run `npx capacitor-assets generate` before store submission.
 - No Android Studio/SDK or Mac+Xcode on this machine yet, so the app hasn't been run on an emulator/simulator/device — only scaffolded and built.
@@ -106,8 +118,8 @@ Once you've done steps 1–3 above and have access to Android Studio and/or a Ma
 
 ## 7. Plan for remaining phases
 
-### ⏭ Phase 0.5 — Developer account setup (deferred to user)
-Apple Developer Program (personal, ~US$99/yr, identity verification can take 24–48h) + Google Play Console (personal, ~US$25 one-time) + a OneSignal account/app. **User is handling this independently, on their own timeline.** Needed before: real push notification certificates (APNs key), and before any store submission (Phase 8).
+### 🟡 Phase 0.5 — Developer account setup — **in progress, see §6 above for current blockers**
+Google Play Console account created + app listing walkthrough in progress. Apple Developer Program enrollment hit an error, needs the user to resolve directly with Apple. OneSignal account not yet created (not urgent until Phase 4). Needed before: real push notification certificates (APNs key), and before any store submission (Phase 8).
 
 ### 🟡 Phase 2 — Auth migration — **code done, see §6 above for manual console steps + testing still needed**
 
@@ -168,6 +180,12 @@ Apple Developer Program (personal, ~US$99/yr, identity verification can take 24�
 
 ## 8. Immediate next step
 
-**Phase 2 (Auth migration) code is done** (see §6). It's now blocked on you: add the Android/iOS apps to the Firebase Console and place the resulting `google-services.json` / `GoogleService-Info.plist` files (steps 1–3 in §6), then test on a device/emulator once you have Android Studio and/or a Mac available.
+Everything currently actionable on this machine without you is essentially done or blocked on you. Open items, roughly in priority order:
 
-Meanwhile, **Phase 3 (PDF/file export adaptation)** doesn't depend on any of that and can proceed next.
+1. **You:** add Android/iOS apps in the Firebase Console + place `google-services.json` / `GoogleService-Info.plist` (Phase 2, §6) so native Google Sign-In can eventually be tested.
+2. **You:** add `signallinglogbook.com` to Firebase Auth's authorized domains (quick, unblocks Web sign-in on the custom domain).
+3. **You:** resolve the Apple Developer Program enrollment error at `developer.apple.com/account`, and keep progressing the Google Play Console app listing.
+4. **Me, next:** **Phase 3 (PDF/file export adaptation)** doesn't depend on any of the above and can proceed now.
+5. Longer-term: Phase 7/8 (device testing, store submission) are blocked on Android Studio/SDK and a Mac+Xcode, neither present on this machine.
+
+A visual status board mapping all of this against a generic architecture diagram is at `BUILD_STATUS.html` (open directly in a browser) — regenerate/update it whenever a phase status changes materially.

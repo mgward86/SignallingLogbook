@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Signalling Logbook — Build Status</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --panel: #ffffff;
+    --border: #e2e5ea;
+    --text: #14181f;
+    --text-secondary: #565d6b;
+    --text-tertiary: #868d99;
+    --accent: #2563eb;
+    --info-bg: #eef4ff;
+    --info-border: #c8d9f9;
+    --green: #1f9d55;
+    --yellow: #b7791f;
+    --red: #d0362f;
+    --gray: #868d99;
+    --blue: #2563eb;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 40px 24px 80px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+
+  .page {
+    max-width: 1140px;
+    margin: 0 auto;
+  }
+
+  h1 {
+    font-size: 26px;
+    font-weight: 650;
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+
+  h2 {
+    font-size: 18px;
+    font-weight: 650;
+    margin: 0 0 12px;
+    letter-spacing: -0.01em;
+  }
+
+  .subtitle {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin: 0 0 28px;
+    max-width: 760px;
+  }
+
+  .meta {
+    color: var(--text-tertiary);
+    font-size: 12px;
+    margin: 0 0 28px;
+  }
+
+  section { margin-bottom: 36px; }
+
+  .callout {
+    background: var(--info-bg);
+    border: 1px solid var(--info-border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 28px;
+    font-size: 13px;
+    color: var(--text);
+  }
+  .callout strong { display: block; font-size: 13px; margin-bottom: 4px; }
+
+  /* Stat strip */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px;
+    margin-bottom: 36px;
+  }
+  .stat {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .stat .value { font-size: 20px; font-weight: 650; margin-bottom: 2px; }
+  .stat .label { font-size: 12px; color: var(--text-secondary); }
+  .stat.success .value { color: var(--green); }
+  .stat.warning .value { color: var(--yellow); }
+  .stat.danger .value { color: var(--red); }
+
+  /* Status dot + label */
+  .status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .dot.green { background: var(--green); }
+  .dot.yellow { background: var(--yellow); }
+  .dot.red { background: var(--red); }
+  .dot.gray { background: var(--gray); }
+  .dot.blue { background: var(--blue); }
+
+  /* Legend */
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 28px; font-size: 12px; color: var(--text-secondary); }
+
+  /* Pipeline diagrams */
+  .pipeline-scroll { overflow-x: auto; padding-bottom: 8px; }
+  .pipeline { display: flex; align-items: center; gap: 0; min-width: max-content; }
+  .pipeline .node {
+    width: 190px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: var(--panel);
+    flex: none;
+  }
+  .pipeline .node-title { font-size: 12px; font-weight: 650; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .pipeline .node-sub { font-size: 12.5px; margin-bottom: 4px; }
+  .pipeline .node-note { font-size: 11.5px; color: var(--text-tertiary); }
+  .pipeline .arrow { flex: none; width: 34px; text-align: center; color: var(--text-tertiary); font-size: 16px; }
+
+  /* Grids of cards */
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .card .card-title { font-size: 12px; font-weight: 650; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .card .card-sub { font-size: 12.5px; margin-bottom: 4px; }
+  .card .card-note { font-size: 11.5px; color: var(--text-tertiary); }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; font-size: 13px; }
+  thead th {
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-tertiary);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: #fafbfc;
+  }
+  tbody td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  td.status-cell { white-space: nowrap; }
+
+  footer { margin-top: 48px; font-size: 12px; color: var(--text-tertiary); border-top: 1px solid var(--border); padding-top: 16px; }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Signalling Logbook — Build Status</h1>
+  <p class="subtitle">Mapped against a generic AI-app-building architecture diagram a friend sent over. Green means done, blue means working but on different (pre-existing) technology than the diagram assumes.</p>
+  <p class="meta">Generated 14 September 2026 · repo: github.com/mgward86/SignallingLogbook · see <code>STATUS.md</code> for full narrative detail</p>
+
+  <div class="callout">
+    <strong>About this comparison</strong>
+    That diagram is a generic template for an AI-app-building platform (Next.js, Neon/Postgres, Clerk/Auth0, Stripe, PostHog, Flutter). This project predates the template and already had a working Vite/React + Firebase stack, so several boxes below are intentionally different rather than missing.
+  </div>
+
+  <div class="stats">
+    <div class="stat success"><div class="value">Live</div><div class="label">Web app</div></div>
+    <div class="stat success"><div class="value">Done</div><div class="label">Auth migration (Phase 2 code)</div></div>
+    <div class="stat warning"><div class="value">In progress</div><div class="label">Android / Play Console</div></div>
+    <div class="stat danger"><div class="value">Blocked</div><div class="label">iOS / App Store Connect</div></div>
+  </div>
+
+  <div class="legend">
+    <span class="status"><span class="dot green"></span>Done / in use</span>
+    <span class="status"><span class="dot yellow"></span>In progress</span>
+    <span class="status"><span class="dot red"></span>Blocked</span>
+    <span class="status"><span class="dot gray"></span>Not started</span>
+    <span class="status"><span class="dot blue"></span>Different tech (working, not what the diagram assumed)</span>
+  </div>
+
+  <section>
+    <h2>Core stack</h2>
+    <div class="pipeline-scroll">
+      <div class="pipeline">
+        <div class="node">
+          <div class="node-title">Users</div>
+          <div class="node-sub">Signalling techs &amp; supervisors</div>
+        </div>
+        <div class="arrow">&#8594;</div>
+        <div class="node">
+          <div class="node-title">Frontend <span class="status"><span class="dot green"></span>Done</span></div>
+          <div class="node-sub">React 19 + Vite 6 + Tailwind</div>
+          <div class="node-note">Diagram assumed Next.js — this is Vite/React</div>
+        </div>
+        <div class="arrow">&#8594;</div>
+        <div class="node">
+          <div class="node-title">Backend <span class="status"><span class="dot green"></span>Done</span></div>
+          <div class="node-sub">Firebase Auth + Firestore rules</div>
+          <div class="node-note">No custom API layer needed</div>
+        </div>
+        <div class="arrow">&#8594;</div>
+        <div class="node">
+          <div class="node-title">Database <span class="status"><span class="dot green"></span>Done</span></div>
+          <div class="node-sub">Firebase Firestore</div>
+          <div class="node-note">Not Neon/Postgres — pre-existing choice</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>External integrations &amp; services</h2>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-title">Cursor &amp; Claude <span class="status"><span class="dot green"></span>In use</span></div>
+        <div class="card-sub">AI coding assistant &amp; agent</div>
+        <div class="card-note">Building this project right now</div>
+      </div>
+      <div class="card">
+        <div class="card-title">GitHub <span class="status"><span class="dot green"></span>Done</span></div>
+        <div class="card-sub">Source control</div>
+        <div class="card-note">mgward86/SignallingLogbook — pushes to main need approval</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Vercel <span class="status"><span class="dot green"></span>Done</span></div>
+        <div class="card-sub">Hosting &amp; deployments</div>
+        <div class="card-note">Live at signallinglogbook.com + www redirect</div>
+      </div>
+      <div class="card">
+        <div class="card-title">OneSignal <span class="status"><span class="dot gray"></span>Not started</span></div>
+        <div class="card-sub">Push &amp; email notifications</div>
+        <div class="card-note">Planned for Phase 4 — not started</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Flutter &#8594; Capacitor <span class="status"><span class="dot blue"></span>Different tech</span></div>
+        <div class="card-sub">Cross-platform mobile</div>
+        <div class="card-note">Wraps the existing React app instead of a Flutter rewrite</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Xcode <span class="status"><span class="dot red"></span>Blocked</span></div>
+        <div class="card-sub">iOS builds &amp; App Store</div>
+        <div class="card-note">No Mac available. Apple Developer enrollment stuck</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Google Play Console <span class="status"><span class="dot yellow"></span>In progress</span></div>
+        <div class="card-sub">Android builds &amp; submission</div>
+        <div class="card-note">Account created, listing in progress, needs a signed build</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Neon/Postgres &#8594; Firebase <span class="status"><span class="dot blue"></span>Different tech</span></div>
+        <div class="card-sub">Database hosting</div>
+        <div class="card-note">Firestore, not Postgres — pre-existing, already live</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>User journey</h2>
+    <div class="pipeline-scroll">
+      <div class="pipeline">
+        <div class="node">
+          <div class="node-title">Your Users</div>
+          <div class="node-sub">Create accounts, log work</div>
+        </div>
+        <div class="arrow">&#8594;</div>
+        <div class="node">
+          <div class="node-title">Web App <span class="status"><span class="dot green"></span>Done</span></div>
+          <div class="node-sub">signallinglogbook.com</div>
+          <div class="node-note">Live now, custom domain connected</div>
+        </div>
+        <div class="arrow">&#8594;</div>
+        <div class="node">
+          <div class="node-title">Mobile Apps <span class="status"><span class="dot yellow"></span>In progress</span></div>
+          <div class="node-sub">iOS &amp; Android via Capacitor</div>
+          <div class="node-note">Not Flutter. Auth code done, not run on a device yet</div>
+        </div>
+        <div class="arrow">&#8594;</div>
+        <div class="node">
+          <div class="node-title">Push &amp; Email <span class="status"><span class="dot gray"></span>Not started</span></div>
+          <div class="node-sub">OneSignal (planned)</div>
+          <div class="node-note">Phase 4 — not started</div>
+        </div>
+        <div class="arrow">&#8594;</div>
+        <div class="node">
+          <div class="node-title">App Stores <span class="status"><span class="dot red"></span>Blocked</span></div>
+          <div class="node-sub">iOS App Store &amp; Google Play</div>
+          <div class="node-note">Apple enrollment stuck. Google listing in progress</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Environments</h2>
+    <div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+      <div class="card">
+        <div class="card-title">Development <span class="status"><span class="dot green"></span>Done</span></div>
+        <div class="card-sub">Local <code>npm run dev</code>, shares the prod Firebase project</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Staging <span class="status"><span class="dot gray"></span>Not started</span></div>
+        <div class="card-sub">No separate staging environment exists yet</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Production <span class="status"><span class="dot green"></span>Done</span></div>
+        <div class="card-sub">signallinglogbook.com on Vercel</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Security &amp; operations</h2>
+    <table>
+      <thead>
+        <tr><th>Practice</th><th>Status</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Environment variables / secrets</td>
+          <td class="status-cell"><span class="status"><span class="dot yellow"></span>Partial</span></td>
+          <td>Gemini key removed from the client bundle; most config is an intentionally public Firebase web config</td>
+        </tr>
+        <tr>
+          <td>HTTPS / SSL</td>
+          <td class="status-cell"><span class="status"><span class="dot green"></span>Done</span></td>
+          <td>Automatic via Vercel on the apex domain and the www redirect</td>
+        </tr>
+        <tr>
+          <td>Role-based access</td>
+          <td class="status-cell"><span class="status"><span class="dot yellow"></span>Partial</span></td>
+          <td>Firestore security rules + an admin Config Manager exist; not formally audited</td>
+        </tr>
+        <tr>
+          <td>Backups &amp; disaster recovery</td>
+          <td class="status-cell"><span class="status"><span class="dot gray"></span>Not set up</span></td>
+          <td>No explicit Firestore export/backup strategy in place</td>
+        </tr>
+        <tr>
+          <td>Monitoring &amp; logging</td>
+          <td class="status-cell"><span class="status"><span class="dot gray"></span>Not set up</span></td>
+          <td>No Sentry — just console logging and Vercel's deployment logs</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer>
+    This is a static snapshot for your own reference/planning — it does not auto-update. Ask your Cursor agent to regenerate it (or update <code>STATUS.md</code>) whenever a phase status changes materially.
+  </footer>
+
+</div>
+</body>
+</html>
