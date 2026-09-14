@@ -173,3 +173,16 @@ This excludes store review turnaround time and any design/asset work (icons, scr
 - Verified: `tsc --noEmit` passes, `vite build` + `npx cap sync` both succeed cleanly, native `android/`/`ios/` folders are reasonably sized (~2.6MB each, ~77/40 files).
 - **Still a placeholder:** the "RSL" wordmark icon/splash is a functional stand-in, not real branding. Swap `resources/icon.png` + `resources/splash.png` for real artwork and re-run `npx capacitor-assets generate` before any store submission.
 - **Not yet possible without local tooling:** actually launching the app in an Android emulator/device (needs Android Studio/SDK) or iOS simulator/device (needs a Mac). Scaffolding is committed and ready for whenever that tooling is available.
+
+### 🟡 Phase 2 — Auth migration (code done, awaiting your Firebase Console setup + device testing)
+- Installed `@capacitor-firebase/authentication` (v8.5.1).
+- `AuthContext.tsx`: `signIn()`/`logOut()` now branch on `Capacitor.isNativePlatform()`. Native path uses `FirebaseAuthentication.signInWithGoogle()` for the OS-native Google chooser, then mirrors the credential into the Firebase JS SDK with `signInWithCredential()` so all existing Firestore/profile-creation/`onAuthStateChanged` logic keeps working identically to Web.
+- `firebase.ts`: native platforms now initialize auth with `initializeAuth(app, { persistence: indexedDBLocalPersistence })` per the plugin's guidance, instead of `getAuth(app)`, so sessions survive app restarts on-device.
+- `capacitor.config.ts` / `android/variables.gradle`: added the plugin's required config (`providers: ['google.com']`) and native Gradle variables (`rgcfaIncludeGoogle`, `androidxCredentialsVersion`).
+- iOS: since this project uses Swift Package Manager (no Podfile/CocoaPods), the plugin's `Google` SPM package trait is included by default — no manual Xcode dependency wiring needed. `SceneDelegate.swift` already forwards `openURLContexts` through Capacitor's plugin proxy, so the Google Sign-In redirect will work once the URL scheme is registered (see below).
+- Verified: `tsc --noEmit`, `vite build`, and `npm run cap:sync` all pass; both native projects picked up the new plugin correctly.
+- **Blocked on you** (needs Firebase Console access for project `gen-lang-client-0452980140`, which this session doesn't have):
+  1. Confirm Google sign-in provider is enabled (Authentication → Sign-in method).
+  2. Register an Android app (`com.mward.signallinglogbook`) + your debug keystore's SHA-1 fingerprint, download `google-services.json` → `android/app/google-services.json`.
+  3. Register an iOS app (`com.mward.signallinglogbook`), download `GoogleService-Info.plist` → `ios/App/App/GoogleService-Info.plist`, then add a URL Type in Xcode using that file's `REVERSED_CLIENT_ID` as the URL Scheme.
+  4. Test the full sign-in → profile creation → sign-out cycle on-device (needs Android Studio/SDK or a Mac+Xcode — neither is available on this machine), plus a Web regression pass.

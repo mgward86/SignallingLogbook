@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
+import { User, onAuthStateChanged, signInWithPopup, signInWithCredential, GoogleAuthProvider, signOut } from 'firebase/auth';
+import { Capacitor } from '@capacitor/core';
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { auth, db, removeUndefinedProperties } from './firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -107,20 +109,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSigningIn(true);
     setAuthError(null);
     try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({
-        prompt: 'select_account'
-      });
-      await signInWithPopup(auth, provider);
+      if (Capacitor.isNativePlatform()) {
+        // Native (iOS/Android): use the OS-native Google account chooser via
+        // @capacitor-firebase/authentication, then mirror the resulting
+        // credential into the Firebase JS SDK so the rest of the app (which
+        // uses the JS SDK's onAuthStateChanged/Firestore) behaves identically
+        // to Web. See docs: setup requires google-services.json (Android) /
+        // GoogleService-Info.plist + URL scheme (iOS) to be configured first.
+        const result = await FirebaseAuthentication.signInWithGoogle();
+        const idToken = result.credential?.idToken;
+        if (!idToken) {
+          throw new Error('No ID token was returned by native Google Sign-In.');
+        }
+        const credential = GoogleAuthProvider.credential(idToken);
+        await signInWithCredential(auth, credential);
+      } else {
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({
+          prompt: 'select_account'
+        });
+        await signInWithPopup(auth, provider);
+      }
     } catch (error: any) {
       console.error('Firebase Auth Sign-In Error:', error);
       let friendlyMessage = 'Authentication failed. Please try again.';
-      
+
       if (error && typeof error === 'object') {
         const code = error.code;
         const message = error.message || '';
-        
-        if (code === 'auth/cancelled-popup-request') {
+        const messageLower = message.toLowerCase();
+
+        if (Capacitor.isNativePlatform()) {
+          if (messageLower.includes('cancel')) {
+            friendlyMessage = 'Sign-in was cancelled before completing. Please try again.';
+          } else if (messageLower.includes('no id token')) {
+            friendlyMessage = 'Google Sign-In did not return the expected credentials. Please try again, or contact support if this persists.';
+          } else if (messageLower.includes('network')) {
+            friendlyMessage = 'A network error occurred during sign-in. Please check your connection and try again.';
+          } else {
+            friendlyMessage = `Native Google Sign-In failed: ${message || 'Unknown error.'}`;
+          }
+        } else if (code === 'auth/cancelled-popup-request') {
           friendlyMessage = 'A sign-in window was closed or overridden by a new sign-in attempt. Please click below to try again.';
         } else if (code === 'auth/popup-blocked') {
           friendlyMessage = 'The Google sign-in window was blocked by your browser. Please allow popups for this site, or try opening application in a new tab.';
@@ -142,6 +171,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logOut = async () => {
     setAuthError(null);
+    if (Capacitor.isNativePlatform()) {
+      // Sign out of the native layer too, otherwise the native Google/Firebase
+      // session can silently persist and auto-resume on next native sign-in.
+      try {
+        await FirebaseAuthentication.signOut();
+      } catch (error) {
+        console.error('Native Firebase Auth Sign-Out Error:', error);
+      }
+    }
     await signOut(auth);
   };
 

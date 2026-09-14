@@ -1,5 +1,6 @@
+import { Capacitor } from '@capacitor/core';
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, initializeAuth, indexedDBLocalPersistence } from 'firebase/auth';
 import { initializeFirestore, doc, getDocFromServer, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -14,7 +15,16 @@ export const db = initializeFirestore(app, {
   })
 }, firebaseConfig.firestoreDatabaseId);
 
-export const auth = getAuth(app);
+// On native platforms (iOS/Android via Capacitor), the Firebase JS SDK's
+// default auth persistence doesn't reliably survive app restarts inside a
+// native WebView. @capacitor-firebase/authentication's docs recommend
+// explicitly using indexedDBLocalPersistence via initializeAuth() in that
+// case (the native WebView does support IndexedDB). Web keeps the default
+// getAuth() behavior. See AuthContext.tsx for the native sign-in flow that
+// pairs with this.
+export const auth = Capacitor.isNativePlatform()
+  ? initializeAuth(app, { persistence: indexedDBLocalPersistence })
+  : getAuth(app);
 
 export enum OperationType {
   CREATE = 'create',

@@ -81,22 +81,34 @@ This machine had **no Git, Node.js, or Firebase CLI** and the repo only existed 
 - Added npm scripts: `cap:sync`, `android:open`, `android:run`, `ios:open`, `ios:run`.
 - Verified: `tsc --noEmit` passes, `vite build` + `npx cap sync` succeed, native folders reasonably sized (~2.6MB/77 files Android, ~2.6MB/40 files iOS thanks to Capacitor's auto-generated `.gitignore`s).
 
+### 🟡 Phase 2 — Auth migration (code complete, blocked on manual console setup + device testing)
+- Added `@capacitor-firebase/authentication` (v8.5.1, matches Capacitor 8).
+- `AuthContext.tsx`: `signIn()` now branches on `Capacitor.isNativePlatform()` — native calls `FirebaseAuthentication.signInWithGoogle()` (OS-native account chooser) to get an ID token, then mirrors it into the Firebase JS SDK via `signInWithCredential(auth, GoogleAuthProvider.credential(idToken))`, so `onAuthStateChanged`/Firestore/profile-creation logic downstream is unchanged. Web keeps the existing `signInWithPopup` flow untouched. `logOut()` now also calls `FirebaseAuthentication.signOut()` on native before the JS SDK sign-out, to avoid a stale native session silently resuming.
+- `firebase.ts`: on native platforms, `auth` is created via `initializeAuth(app, { persistence: indexedDBLocalPersistence })` instead of `getAuth(app)` — per the plugin's docs, this is needed for auth state to reliably survive app restarts inside a native WebView. Web is unaffected.
+- `capacitor.config.ts`: added `plugins.FirebaseAuthentication` config (`skipNativeAuth: false`, `providers: ['google.com']`).
+- `android/variables.gradle`: added `rgcfaIncludeGoogle = true` and `androidxCredentialsVersion` required by the plugin's native Google Sign-In dependency.
+- iOS uses Swift Package Manager (no Podfile), so the `Google` package trait (GoogleSignIn SDK) is included automatically — no manual Xcode/Podfile edit needed for the dependency itself.
+- Verified: `tsc --noEmit` and `vite build` pass; `npm run cap:sync` succeeds and correctly picked up the new plugin on both platforms (`ios/App/CapApp-SPM/Package.swift` and `android/capacitor.settings.gradle`/`capacitor.build.gradle` were regenerated to include `@capacitor-firebase/authentication`).
+
+**Cannot be finished from this machine/session — needs you to do the following in the Firebase Console (project `gen-lang-client-0452980140`) before this can actually be tested:**
+1. **Auth provider:** Confirm **Google** is enabled under Authentication → Sign-in method (it almost certainly already is, since the existing web popup flow depends on it).
+2. **Register an Android app** in Project Settings for package name `com.mward.signallinglogbook`, add your debug keystore's **SHA-1** fingerprint (`keytool -list -v -keystore ~/.android/debug.keystore` — Android Studio's default debug keystore password is `android`), download the generated `google-services.json`, and place it at `android/app/google-services.json` (the Gradle config already conditionally applies the Google Services plugin only if this file exists, so the build won't break in the meantime — see `android/app/build.gradle`).
+3. **Register an iOS app** in Project Settings for bundle ID `com.mward.signallinglogbook`, download `GoogleService-Info.plist`, place it at `ios/App/App/GoogleService-Info.plist`, then in Xcode add a URL Type under the App target's Info tab whose **URL Scheme** is the plist's `REVERSED_CLIENT_ID` value (needed for the Google Sign-In redirect to return to the app — SceneDelegate.swift already forwards `openURLContexts` to Capacitor's plugin proxy, so no Swift code changes are needed).
+4. **Test on a real device/emulator** (needs Android Studio/SDK or a Mac+Xcode, neither available on this machine): full sign-in → profile creation → sign-out cycle on both platforms, plus a Web regression pass to confirm `signInWithPopup` still works unaffected.
+
+Once you've done steps 1–3 above and have access to Android Studio and/or a Mac, this phase just needs testing/verification — no further code changes are expected unless testing surfaces an issue.
+
 ### Known placeholders / follow-ups from completed phases
 - `resources/icon.png` / `resources/splash.png` are functional placeholders — replace with real branding and re-run `npx capacitor-assets generate` before store submission.
 - No Android Studio/SDK or Mac+Xcode on this machine yet, so the app hasn't been run on an emulator/simulator/device — only scaffolded and built.
+- `android/app/google-services.json` and `ios/App/App/GoogleService-Info.plist` don't exist yet (see Phase 2 above) — native Google Sign-In will not work until they're added. These files aren't secrets (like the already-committed `firebase-applet-config.json` web config) so it's fine to commit them once obtained.
 
 ## 7. Plan for remaining phases
 
 ### ⏭ Phase 0.5 — Developer account setup (deferred to user)
 Apple Developer Program (personal, ~US$99/yr, identity verification can take 24–48h) + Google Play Console (personal, ~US$25 one-time) + a OneSignal account/app. **User is handling this independently, on their own timeline.** Needed before: real push notification certificates (APNs key), and before any store submission (Phase 8).
 
-### Phase 2 — Auth migration
-**Problem:** `AuthContext.tsx` uses `signInWithPopup`, which doesn't work reliably inside a native WebView.
-**Plan:**
-1. Add `@capacitor-firebase/authentication` (or `@codetrix-studio/capacitor-google-auth`).
-2. Branch sign-in logic: native platform → native Google Sign-In → `signInWithCredential`; web → keep existing `signInWithPopup`.
-3. Register OAuth client IDs for iOS/Android in Firebase Console + Google Cloud Console.
-4. Test full sign-in → profile creation → sign-out cycle.
+### 🟡 Phase 2 — Auth migration — **code done, see §6 above for manual console steps + testing still needed**
 
 ### Phase 3 — PDF/file export adaptation
 **Problem:** `jspdf`'s `doc.save()` relies on browser download behavior, unreliable in a native WebView sandbox.
@@ -144,7 +156,7 @@ Apple Developer Program (personal, ~US$99/yr, identity verification can take 24�
 | 0. Housekeeping | ✅ done |
 | 0.5. Developer accounts | deferred to user |
 | 1. Capacitor scaffolding | ✅ done |
-| 2. Auth migration | 3–5 days |
+| 2. Auth migration | 🟡 code done — pending your Firebase Console setup + device testing |
 | 3. PDF/file export | 2–3 days |
 | 4. Push notifications | 3–4 days |
 | 5. Biometric app-lock | 1–2 days |
@@ -155,4 +167,6 @@ Apple Developer Program (personal, ~US$99/yr, identity verification can take 24�
 
 ## 8. Immediate next step
 
-**Phase 2 (Auth migration)** is next in line — it's the first remaining phase that isn't blocked by missing local tooling (Android Studio / Mac+Xcode) or the user's pending developer-account setup, so it can proceed now.
+**Phase 2 (Auth migration) code is done** (see §6). It's now blocked on you: add the Android/iOS apps to the Firebase Console and place the resulting `google-services.json` / `GoogleService-Info.plist` files (steps 1–3 in §6), then test on a device/emulator once you have Android Studio and/or a Mac available.
+
+Meanwhile, **Phase 3 (PDF/file export adaptation)** doesn't depend on any of that and can proceed next.
