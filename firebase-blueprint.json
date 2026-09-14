@@ -1,0 +1,109 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "jobTitle": { "type": "string" },
+        "location": { "type": "string" },
+        "isLocationNA": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "LogEntry": {
+      "title": "Signalling Log Entry",
+      "description": "A single entry in the signalling logbook",
+      "type": "object",
+      "properties": {
+        "logNumber": { "type": "string" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "quarter": { "type": "string" },
+        "location": { "type": "string" },
+        "isLocationNA": { "type": "boolean" },
+        "employer": { "type": "string" },
+        "client": { "type": "string" },
+        "infrastructureOwner": { "type": "string" },
+        "projectName": { "type": "string" },
+        "isProjectNA": { "type": "boolean" },
+        "role": { "type": "string" },
+        "equipment": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "category": { "type": "string" },
+              "subCategories": { "type": "array", "items": { "type": "string" } }
+            },
+            "required": ["category", "subCategories"]
+          }
+        },
+        "workType": { "type": "string" },
+        "workDescription": { "type": "string" },
+        "approvingSupervisor": { "type": "string" },
+        "approvingSupervisorRiw": { "type": "string" },
+        "verificationStatus": { "type": "string", "enum": ["draft", "pending_verification", "verified", "rejected", "cancelled"] },
+        "verificationToken": { "type": "string" },
+        "verificationPin": { "type": "string" },
+        "verificationRequestedAt": { "type": "string", "format": "date-time" },
+        "verificationRequestedTo": { "type": "object" },
+        "verificationSignedAt": { "type": "string", "format": "date-time" },
+        "supervisorSignatureDataUrl": { "type": "string" },
+        "supervisorComments": { "type": "string" },
+        "verificationHash": { "type": "string" },
+        "auditTrail": { "type": "array", "items": { "type": "object" } },
+        "isLocked": { "type": "boolean" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["startDate", "equipment", "workType", "userId"]
+    },
+    "AppConfig": {
+      "title": "Application Configuration",
+      "description": "Global settings and dynamic lists",
+      "type": "object",
+      "properties": {
+        "categories": { "type": "array", "items": { "type": "object" } },
+        "workTypes": { "type": "array", "items": { "type": "string" } },
+        "clients": { "type": "array", "items": { "type": "string" } },
+        "employers": { "type": "array", "items": { "type": "string" } },
+        "infrastructureOwners": { "type": "array", "items": { "type": "string" } },
+        "roles": { "type": "array", "items": { "type": "string" } },
+        "locations": { "type": "array", "items": { "type": "string" } },
+        "projects": { "type": "array", "items": { "type": "string" } },
+        "quickParts": { "type": "array", "items": { "type": "object" } },
+        "approvingSupervisors": { "type": "array", "items": { "type": "object" } },
+        "numberingSystem": {
+          "type": "object",
+          "properties": {
+            "prefix": { "type": "string" },
+            "nextNumber": { "type": "number" },
+            "enabled": { "type": "boolean" }
+          }
+        },
+        "quarterFormat": { "type": "string", "enum": ["Q1-Q4", "Months"] }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/logEntries/{logId}": {
+      "schema": "LogEntry",
+      "description": "All signalling log entries"
+    },
+    "/config/main": {
+      "schema": "AppConfig",
+      "description": "Global application configuration"
+    }
+  }
+}

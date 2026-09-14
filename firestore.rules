@@ -1,0 +1,105 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Global Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // --- User Profile Rules ---
+    function isValidUser(data) {
+      return data.uid is string && data.uid.size() <= 128 &&
+             data.email is string && data.email.size() <= 256 &&
+             (data.get('displayName', '') is string && data.get('displayName', '').size() <= 256) &&
+             (data.get('employeeId', '') is string && data.get('employeeId', '').size() <= 64) &&
+             (data.get('jobTitle', '') is string && data.get('jobTitle', '').size() <= 128) &&
+             (data.get('location', '') is string && data.get('location', '').size() <= 128) &&
+             (data.get('isLocationNA', false) is bool);
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().uid == userId;
+      allow update: if isOwner(userId) && isValidUser(incoming()) && 
+                    incoming().uid == existing().uid &&
+                    incoming().email == existing().email;
+    }
+
+    // --- Log Entry Rules ---
+    function isValidLogEntry(data) {
+      return (data.startDate is string && data.startDate.size() <= 10) &&
+             (data.endDate is string && data.endDate.size() <= 10) &&
+             (data.get('location', '') is string && data.get('location', '').size() <= 256) &&
+             (data.get('isLocationNA', false) is bool) &&
+             (data.get('quarter', '') is string && data.get('quarter', '').size() <= 64) &&
+             (data.get('employer', '') is string && data.get('employer', '').size() <= 256) &&
+             (data.get('client', '') is string && data.get('client', '').size() <= 256) &&
+             (data.get('infrastructureOwner', '') is string && data.get('infrastructureOwner', '').size() <= 256) &&
+             (data.get('projectName', '') is string && data.get('projectName', '').size() <= 256) &&
+             (data.get('isProjectNA', false) is bool) &&
+             (data.get('role', '') is string && data.get('role', '').size() <= 128) &&
+             (data.equipment is list && data.equipment.size() >= 1 && data.equipment.size() <= 20) &&
+             (data.workType is string && data.workType.size() <= 128) &&
+             (data.userId is string && data.userId.size() <= 128) &&
+             (data.get('workDescription', '') is string && data.get('workDescription', '').size() <= 100000) &&
+             (data.get('logNumber', '') is string && data.get('logNumber', '').size() <= 64) &&
+             (data.get('certifierName', '') is string && data.get('certifierName', '').size() <= 256) &&
+             (data.get('certifierEmail', '') is string && data.get('certifierEmail', '').size() <= 256) &&
+             (data.get('approvingSupervisor', '') is string && data.get('approvingSupervisor', '').size() <= 256) &&
+             (data.get('approvingSupervisorRiw', '') is string && data.get('approvingSupervisorRiw', '').size() <= 128) &&
+             (data.get('verificationStatus', 'draft') is string && data.get('verificationStatus', 'draft').size() <= 64) &&
+             (data.get('verificationToken', '') is string && data.get('verificationToken', '').size() <= 128) &&
+             (data.get('verificationPin', '') is string && data.get('verificationPin', '').size() <= 32) &&
+             (data.get('verificationRequestedAt', '') is string && data.get('verificationRequestedAt', '').size() <= 64) &&
+             (data.get('verificationSignedAt', '') is string && data.get('verificationSignedAt', '').size() <= 64) &&
+             (data.get('supervisorSignatureDataUrl', '') is string && data.get('supervisorSignatureDataUrl', '').size() <= 500000) &&
+             (data.get('supervisorComments', '') is string && data.get('supervisorComments', '').size() <= 5000) &&
+             (data.get('verificationHash', '') is string && data.get('verificationHash', '').size() <= 256) &&
+             (data.get('isLocked', false) is bool);
+    }
+
+    match /logEntries/{logId} {
+      allow get: if (isSignedIn() && isOwner(existing().userId)) ||
+                  (resource.data.verificationToken != null && resource.data.verificationToken != '');
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidLogEntry(incoming()) && isOwner(incoming().userId) && 
+                    incoming().createdAt == request.time;
+      allow update: if isValidLogEntry(incoming()) && 
+                    ((isSignedIn() && isOwner(existing().userId) && incoming().userId == existing().userId) ||
+                     (existing().verificationToken != null && existing().verificationToken != '')) &&
+                    (!('createdAt' in incoming()) || incoming().createdAt == existing().createdAt) &&
+                    incoming().updatedAt == request.time;
+      allow delete: if isSignedIn() && isOwner(existing().userId);
+    }
+
+    // --- Config Rules ---
+    function isValidConfig(data) {
+      return (data.get('categories', []) is list) &&
+             (data.get('workTypes', []) is list) &&
+             (data.get('clients', []) is list) &&
+             (data.get('employers', []) is list) &&
+             (data.get('infrastructureOwners', []) is list) &&
+             (data.get('roles', []) is list) &&
+             (data.get('locations', []) is list) &&
+             (data.get('projects', []) is list) &&
+             (data.get('quickParts', []) is list) &&
+             (data.get('approvingSupervisors', []) is list) &&
+             (data.get('numberingSystem', null) == null || data.get('numberingSystem', null) is map) &&
+             (data.get('quarterFormat', 'Q1-Q4') in ['Q1-Q4', 'Months']);
+    }
+
+    match /config/{listId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (listId == 'main' && isValidConfig(incoming()));
+    }
+  }
+}
