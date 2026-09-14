@@ -3,6 +3,7 @@
 > Single up-to-date reference: what this project is, what's been done, and what's left.
 > Companion docs: `PROJECT_OVERVIEW.md` (deep-dive on the existing web app's architecture) and `MOBILE_DEPLOYMENT_PLAN.md` (original detailed mobile plan + phase-by-phase progress log). This file consolidates both into one current-state summary.
 > Repo: https://github.com/mgward86/SignallingLogbook — local clone: `c:\Users\mgwar\Documents\Signalling Logbook`
+> Web deployment: **Vercel** project `matt-ward1/signalling-logbook`, live at https://signallinglogbook.com (custom domain, `www` redirects to apex with a 308) and https://signalling-logbook.vercel.app. Deploy with `npx vercel --prod` from the repo root (requires `vercel login` once per machine).
 
 ---
 
