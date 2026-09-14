@@ -17,12 +17,14 @@ service cloud.firestore {
     // --- User Profile Rules ---
     function isValidUser(data) {
       return data.uid is string && data.uid.size() <= 128 &&
-             data.email is string && data.email.size() <= 256 &&
-             (data.get('displayName', '') is string && data.get('displayName', '').size() <= 256) &&
-             (data.get('employeeId', '') is string && data.get('employeeId', '').size() <= 64) &&
-             (data.get('jobTitle', '') is string && data.get('jobTitle', '').size() <= 128) &&
-             (data.get('location', '') is string && data.get('location', '').size() <= 128) &&
-             (data.get('isLocationNA', false) is bool);
+        data.email is string && data.email.size() <= 256 &&
+        (data.get('displayName', '') is string && data.get('displayName', '').size() <= 256) &&
+        (data.get('employeeId', '') is string && data.get('employeeId', '').size() <= 64) &&
+        (data.get('jobTitle', '') is string && data.get('jobTitle', '').size() <= 128) &&
+        (data.get('location', '') is string && data.get('location', '').size() <= 128) &&
+        (data.get('isLocationNA', false) is bool) &&
+        (data.get('oneSignalPlayerId', '') is string && data.get('oneSignalPlayerId', '').size() <= 128) &&
+        (data.get('biometricLockEnabled', false) is bool);
     }
 
     match /users/{userId} {

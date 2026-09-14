@@ -17,6 +17,9 @@ export interface UserProfile {
     enabled: boolean;
   };
   quarterFormat?: 'Q1-Q4' | 'Months';
+  // Mobile app fields (see MOBILE_DEPLOYMENT_PLAN.md)
+  oneSignalPlayerId?: string;
+  biometricLockEnabled?: boolean;
   pdfConfig?: {
     title?: string;
     subtitle?: string;
