@@ -15,6 +15,8 @@ import {
   contrastRatio,
   HEADER_STYLE_UNSUPPORTED_KEYS,
   HEADER_STYLE_LOCKED_ORIENTATION,
+  APP_NAME,
+  resolveHeaderStyle,
   type PdfConfig,
 } from '../lib/pdfGenerator';
 import { downloadPdf } from '../lib/pdfExport';
@@ -65,7 +67,7 @@ const HEADER_STYLE_LABELS: Record<string, string> = {
   'accent-lines': 'Accent Lines',
   'solid-banner': 'Solid Banner',
   'bold-left': 'Left Accent Border',
-  'jmdr-grid': 'Competency Grid (JMDR)',
+  'condensed-table': 'Condensed Table',
 };
 
 export function UserProfileForm() {
@@ -219,11 +221,11 @@ export function UserProfileForm() {
     supervisorDeclaration: source?.supervisorDeclaration || DEFAULT_PDF_CONFIG.supervisorDeclaration,
     showEquipment: source?.showEquipment !== false,
     showCertificationDetails: source?.showCertificationDetails !== false,
-    pageOrientation: source?.pageOrientation || DEFAULT_PDF_CONFIG.pageOrientation,
+    pageOrientation: HEADER_STYLE_LOCKED_ORIENTATION[resolveHeaderStyle(source?.headerStyle)] || source?.pageOrientation || DEFAULT_PDF_CONFIG.pageOrientation,
     marginSize: source?.marginSize || DEFAULT_PDF_CONFIG.marginSize,
     fontFamily: source?.fontFamily || DEFAULT_PDF_CONFIG.fontFamily,
     fontSizeModifier: source?.fontSizeModifier || DEFAULT_PDF_CONFIG.fontSizeModifier,
-    headerStyle: source?.headerStyle || DEFAULT_PDF_CONFIG.headerStyle,
+    headerStyle: resolveHeaderStyle(source?.headerStyle),
     layoutSpacing: source?.layoutSpacing || DEFAULT_PDF_CONFIG.layoutSpacing,
     showOwnerSignature: source?.showOwnerSignature || false,
     showPageNumbers: source?.showPageNumbers !== false,
@@ -359,10 +361,11 @@ export function UserProfileForm() {
   // Settings the *currently selected* header style silently ignores — used
   // to grey out + annotate those controls instead of letting them appear to
   // do nothing when toggled. Keep in sync with `pdfGenerator.ts`.
-  const unsupportedKeys = HEADER_STYLE_UNSUPPORTED_KEYS[pdfConfig.headerStyle] || [];
+  const resolvedHeaderStyle = resolveHeaderStyle(pdfConfig.headerStyle);
+  const unsupportedKeys = HEADER_STYLE_UNSUPPORTED_KEYS[resolvedHeaderStyle] || [];
   const isSettingUnsupported = (key: keyof PdfConfig) => unsupportedKeys.includes(key);
-  const lockedOrientation = HEADER_STYLE_LOCKED_ORIENTATION[pdfConfig.headerStyle];
-  const activeHeaderStyleLabel = HEADER_STYLE_LABELS[pdfConfig.headerStyle] || 'this layout';
+  const lockedOrientation = HEADER_STYLE_LOCKED_ORIENTATION[resolvedHeaderStyle];
+  const activeHeaderStyleLabel = HEADER_STYLE_LABELS[resolvedHeaderStyle] || 'this layout';
 
   // Accent colour validation + a plain-English readability check against a
   // white page background (every current header style renders this colour
@@ -882,7 +885,7 @@ export function UserProfileForm() {
                           { value: 'accent-lines', name: 'Accent Lines' },
                           { value: 'solid-banner', name: 'Solid Banner' },
                           { value: 'bold-left', name: 'Left Accent Border' },
-                          { value: 'jmdr-grid', name: 'Competency Grid (JMDR)' }
+                          { value: 'condensed-table', name: 'Condensed Table' }
                         ].map(opt => (
                           <button
                             key={opt.value}
@@ -893,7 +896,7 @@ export function UserProfileForm() {
                               ...(HEADER_STYLE_LOCKED_ORIENTATION[opt.value] ? { pageOrientation: HEADER_STYLE_LOCKED_ORIENTATION[opt.value] } : {})
                             }))}
                             className={`py-2 px-1 rounded-xl border text-[11px] font-bold transition text-center cursor-pointer ${
-                              pdfConfig.headerStyle === opt.value
+                              resolvedHeaderStyle === opt.value
                                 ? 'border-rail-blue bg-rail-blue/5 text-rail-blue ring-2 ring-rail-blue/30 shadow-sm'
                                 : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'
                             }`}
@@ -1201,8 +1204,8 @@ export function UserProfileForm() {
                           className="space-y-4 pl-4 border-l-2 border-rail-blue/20 overflow-hidden pt-2"
                         >
                           <ToggleSwitch
-                            label="Supervisor Comments Space"
-                            description="Include a lined space for the supervisor's hand-written comments"
+                            label="Supervisor Comments / Observations"
+                            description="Print the supervisor's comments (or observations, on Condensed Table) on the export"
                             disabledNote={`Always shown in the ${activeHeaderStyleLabel} layout`}
                             checked={pdfConfig.showSupervisorComments !== false}
                             disabled={isSettingUnsupported('showSupervisorComments')}
@@ -1345,120 +1348,87 @@ export function UserProfileForm() {
                               ...fs(7)
                             }}
                           >
-                            {pdfConfig.headerStyle === 'jmdr-grid' ? (
-                              <div className="border border-gray-900 text-gray-900 bg-white text-[4px] leading-tight flex flex-col justify-between h-full font-sans overflow-hidden">
-                                {/* Header Grid Box */}
-                                <div>
-                                  {/* Row 1: Logo | Main Title | Version Box */}
-                                  <div className="grid grid-cols-12 border-b border-gray-800 text-center items-stretch font-bold">
-                                    <div className="col-span-2 border-r border-gray-800 p-1 flex items-center justify-center bg-amber-100/60 min-h-[22px]">
-                                      <span className="text-[7.5px] font-black tracking-wider uppercase" style={{ color: pdfConfig.accentColor || '#003057', ...fs(7.5) }}>
-                                        JMDR
-                                      </span>
+                            {resolvedHeaderStyle === 'condensed-table' ? (
+                              <div className="flex flex-col justify-between h-full font-sans overflow-hidden leading-tight text-slate-800">
+                                <div className="space-y-1.5">
+                                  <div className="bg-slate-800 text-white px-2 py-1.5 flex justify-between items-center gap-2" style={{ borderBottom: `2px solid ${pdfConfig.accentColor || '#003057'}` }}>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="uppercase tracking-widest text-slate-400 font-semibold" style={fs(3.2)}>Employer</div>
+                                      <div className="font-extrabold truncate" style={fs(7)}>Sample Rail Services</div>
                                     </div>
-                                    <div className="col-span-7 border-r border-gray-800 p-1 font-extrabold uppercase tracking-tight flex items-center justify-center min-h-[22px] text-gray-900" style={fs(6.5)}>
-                                      {pdfConfig.title || 'SIGNALS COMPETENCY WORK EXPERIENCE RECORD'}
+                                    <div className="font-extrabold uppercase tracking-tight text-center shrink-0 px-2" style={fs(6.5)}>
+                                      {pdfConfig.title || 'SIGNALLING LOGBOOK'}
                                     </div>
-                                    <div className="col-span-3 text-[3.8px] font-normal leading-tight flex flex-col justify-center">
-                                      <div className="border-b border-gray-800 py-0.5 text-center font-medium" style={fs(3.8)}>Version: 1</div>
-                                      <div className="py-0.5 text-center font-medium" style={fs(3.8)}>Effective from: 1st February 2018</div>
+                                    <div className="text-right min-w-0 flex-1">
+                                      <div className="uppercase tracking-widest text-slate-400 font-semibold" style={fs(3.2)}>Log Number</div>
+                                      <div className="font-bold font-mono" style={fs(7)}>LOG-0125</div>
                                     </div>
                                   </div>
 
-                                  {/* Row 2: Record Period */}
-                                  <div className="border-b border-gray-800 px-1.5 py-0.5 flex gap-2 font-bold bg-gray-50/80" style={fs(4.5)}>
-                                    <span>Work Experience Record Period:</span>
-                                    <span className="text-blue-900 font-extrabold" style={{ color: pdfConfig.accentColor || '#003057' }}>FY2425 Q2: October 2024 - December 2024</span>
+                                  <div className="flex justify-between gap-2 bg-slate-50 border border-slate-200 px-2 py-1 font-semibold" style={fs(4)}>
+                                    <span style={{ color: pdfConfig.accentColor || '#003057' }}>Work Experience Record Period: Q2: 17/09/2026 – 17/09/2026</span>
+                                    <span>Name: {profile?.displayName?.toUpperCase() || 'MATTHEW WARD'}</span>
+                                    <span>RIW: {profile?.employeeId || '20-00069775'}</span>
                                   </div>
 
-                                  {/* Row 3: User Name & RIW Ref */}
-                                  <div className="border-b-2 border-gray-900 px-1.5 py-0.5 flex justify-between font-bold bg-white" style={fs(4.5)}>
-                                    <div>Name: <span className="text-blue-900 font-extrabold">{profile?.displayName?.toUpperCase() || 'MATTHEW WARD'}</span></div>
-                                    <div>Identification Competency Reference (RIW): <span className="text-blue-900 font-extrabold">{profile?.employeeId || '20-00069775'}</span></div>
-                                  </div>
-
-                                  {/* Table Column Headers */}
-                                  <div className="grid grid-cols-12 border-b border-gray-800 bg-gray-100/90 font-extrabold text-center text-[3.8px] leading-tight">
-                                    <div className="col-span-2 border-r border-gray-800 p-0.5 flex flex-col justify-center">Dates<br/><span className="font-normal text-gray-500 text-[3.2px]">(From/To)</span></div>
-                                    <div className="col-span-2 border-r border-gray-800 p-0.5 flex flex-col justify-center">Employer/Client and<br/><span className="font-normal text-gray-500 text-[3.2px]">Infrastructure Owner</span></div>
-                                    <div className="col-span-3 border-r border-gray-800 p-0.5 text-left flex flex-col justify-center">Description of Task:<br/><span className="font-normal text-gray-500 text-[3.2px]">(Description of Role(s) in competencies/levels)</span></div>
-                                    <div className="col-span-1 border-r border-gray-800 p-0.5 flex items-center justify-center">Ref</div>
-                                    <div className="col-span-2 border-r border-gray-800 p-0.5 text-left flex items-center">Equipment or System Types</div>
-                                    <div className="col-span-1 border-r border-gray-800 p-0.5 flex flex-col justify-center">Verification Signature<br/><span className="font-normal text-gray-500 text-[3px]">(Name &amp; ID)</span></div>
-                                    <div className="col-span-1 p-0.5 flex flex-col justify-center">Supervisor Observations<br/><span className="font-normal text-gray-500 text-[3px]">(Assessment)</span></div>
-                                  </div>
-
-                                  {/* Main Grid Content Row */}
-                                  <div className="grid grid-cols-12 border-b border-gray-800 text-[3.8px] leading-tight bg-white">
-                                    {/* Col 1: Dates */}
-                                    <div className="col-span-2 border-r border-gray-800 p-1 font-bold space-y-1">
-                                      <div>October 2024 - December 2024</div>
-                                      <div className="font-extrabold text-gray-900 mt-1">Final Commissioning date: 31/12/24</div>
+                                  <div className="border border-slate-200 overflow-hidden" style={fs(3.8)}>
+                                    <div className="grid grid-cols-12 bg-slate-100 font-extrabold text-center border-b border-slate-200" style={{ color: pdfConfig.accentColor || '#003057' }}>
+                                      <div className="col-span-2 border-r border-slate-200 p-0.5">Dates<br/><span className="font-normal text-slate-400" style={fs(3.2)}>(From/To)</span></div>
+                                      <div className="col-span-2 border-r border-slate-200 p-0.5">Employer/Client and<br/><span className="font-normal text-slate-400" style={fs(3.2)}>Infrastructure Owner</span></div>
+                                      <div className="col-span-3 border-r border-slate-200 p-0.5 text-left">Description of Task</div>
+                                      <div className="col-span-1 border-r border-slate-200 p-0.5 flex items-center justify-center">Ref</div>
+                                      <div className="col-span-2 border-r border-slate-200 p-0.5 text-left flex items-center">Equipment or System Types</div>
+                                      <div className="col-span-1 border-r border-slate-200 p-0.5">Verification Signature<br/><span className="font-normal text-slate-400" style={fs(3)}>(Name &amp; ID)</span></div>
+                                      {pdfConfig.showSupervisorComments !== false && (
+                                        <div className="col-span-1 p-0.5">Supervisor Observations<br/><span className="font-normal text-slate-400" style={fs(3)}>(Assessment)</span></div>
+                                      )}
                                     </div>
 
-                                    {/* Col 2: Employer / Client / Owner */}
-                                    <div className="col-span-2 border-r border-gray-800 p-1 space-y-1 font-sans">
-                                      <div><strong className="font-bold text-gray-800">Employer:</strong><br/>JMDR</div>
-                                      <div><strong className="font-bold text-gray-800">Client:</strong><br/>Transport for Tomorrow</div>
-                                      <div><strong className="font-bold text-gray-800">Infrastructure Owner:</strong><br/>Sydney Trains</div>
-                                    </div>
-
-                                    {/* Col 3: Task Description */}
-                                    <div className="col-span-3 border-r border-gray-800 p-1 space-y-0.5">
-                                      <div><strong className="font-bold">Role:</strong> Signalling Tester in Charge</div>
-                                      <div><strong className="font-bold">Location:</strong> Sydney - Sydney Terminal</div>
-                                      <div><strong className="font-bold">Project:</strong> MTMS3ASP2 - STAR2</div>
-                                      <p className="text-gray-600 mt-0.5">
-                                        Ongoing management of STAR2 programme of works as Signalling Tester in Charge leading commissioning event...
-                                      </p>
-                                      <ul className="list-disc pl-2 space-y-0.2 mt-0.5 text-gray-700">
-                                        <li>Audit Construction Documentation</li>
-                                        <li>Perform Signal Sighting &amp; Focusing</li>
-                                        <li>Management &amp; Closure of Package</li>
-                                      </ul>
-                                    </div>
-
-                                    {/* Col 4: Ref */}
-                                    <div className="col-span-1 border-r border-gray-800 p-1 text-center font-bold text-[4.5px]">
-                                      01
-                                    </div>
-
-                                    {/* Col 5: Equipment Types */}
-                                    <div className="col-span-2 border-r border-gray-800 p-1 space-y-0.5 text-[3.5px]">
-                                      <div><strong className="font-bold">Interlockings:</strong> Route Relay, Microlok MKII</div>
-                                      <div><strong className="font-bold">Signals:</strong> Colour light LED &amp; Incandescent</div>
-                                      <div><strong className="font-bold">Rail Connections:</strong> 1500VDC Traction Bonding</div>
-                                      <div><strong className="font-bold">Trainstops:</strong> EP JA</div>
-                                      <div><strong className="font-bold">Points:</strong> EP Spherolock, EP Clawlock</div>
-                                      <div><strong className="font-bold">ETCS:</strong> Alstom Fixed ATP &amp; ASDO Balises</div>
-                                    </div>
-
-                                    {/* Col 6: Verification Signature */}
-                                    <div className="col-span-1 border-r border-gray-800 p-1 text-[3.5px] space-y-0.5">
-                                      <div className="font-bold text-gray-900">Adam Toffolo</div>
-                                      <div className="text-gray-600 font-mono">20-0006492</div>
-                                      <div className="text-gray-500">Commissioning Engineer</div>
-                                      <div className="text-gray-400 italic mt-0.5 text-[3px]">Principal Engineer</div>
-                                    </div>
-
-                                    {/* Col 7: Supervisor Observations */}
-                                    <div className="col-span-1 p-1 text-[3.5px] text-gray-500 italic">
-                                      Competence cross-referenced &amp; verified.
+                                    <div className="grid grid-cols-12 bg-white text-slate-700">
+                                      <div className="col-span-2 border-r border-slate-200 p-1 font-semibold space-y-0.5">
+                                        <div>17/09/2026 – 17/09/2026</div>
+                                        <div className="text-slate-500">Final Commissioning date: 17/09/2026</div>
+                                      </div>
+                                      <div className="col-span-2 border-r border-slate-200 p-1 space-y-0.5">
+                                        <div><strong className="text-slate-500">Employer:</strong><br/>Sample Rail Services</div>
+                                        <div><strong className="text-slate-500">Client:</strong><br/>Transport for Tomorrow</div>
+                                        <div><strong className="text-slate-500">Infrastructure Owner:</strong><br/>Sydney Trains</div>
+                                      </div>
+                                      <div className="col-span-3 border-r border-slate-200 p-1 space-y-0.5">
+                                        <div><strong>Role:</strong> Signal Electrician</div>
+                                        <div><strong>Location:</strong> Enfield Hub</div>
+                                        <div><strong>Project:</strong> Enfield Remodelling</div>
+                                        <p className="text-slate-500 mt-0.5">
+                                          Tested signal interlocking mechanism at Location A. Verified contact pressure, relays, and power supply.
+                                        </p>
+                                      </div>
+                                      <div className="col-span-1 border-r border-slate-200 p-1 text-center font-bold" style={fs(4.5)}>
+                                        LOG-0125
+                                      </div>
+                                      <div className="col-span-2 border-r border-slate-200 p-1 space-y-0.5">
+                                        <div><strong>Signal Relay:</strong> Q-Style, Miniature Bi-Bias</div>
+                                        <div><strong>Points:</strong> EP Clamplock</div>
+                                      </div>
+                                      <div className="col-span-1 border-r border-slate-200 p-1 space-y-0.5">
+                                        <div className="font-bold text-slate-900">David Miller</div>
+                                        <div className="font-mono text-slate-500">8839210</div>
+                                      </div>
+                                      {pdfConfig.showSupervisorComments !== false && (
+                                        <div className="col-span-1 p-1 text-slate-600">
+                                          Work reviewed and verified on site — no outstanding issues.
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
 
-                                {/* Footer Table Bar */}
-                                <div className="mt-auto">
-                                  <div className="grid grid-cols-3 border-t border-b border-gray-800 bg-gray-50 text-[3.5px] p-0.5 font-medium text-center text-gray-700">
-                                    <div>Approving Manager: Chief Engineer</div>
-                                    <div>Approval Date: 01/02/2018</div>
-                                    <div>Next Review Date: 01/02/2019</div>
-                                  </div>
-                                  <div className="flex justify-between items-center p-0.5 text-[3.2px] font-mono">
-                                    <span className="text-red-600 font-bold tracking-tight">PRINTOUT MAY NOT BE UP-TO-DATE: REFER TO METRO INTRANET FOR THE LATEST VERSION</span>
-                                    <span className="text-gray-500">Page 1 of 2</span>
-                                  </div>
+                                <div className="mt-auto flex justify-between items-center text-gray-400 pt-1 border-t border-gray-100 font-mono" style={fs(4)}>
+                                  <span className="truncate max-w-[70%]">{pdfConfig.customFooterNote || APP_NAME}</span>
+                                  {pdfConfig.showPageNumbers !== false ? (
+                                    <span>Page 1 of 1</span>
+                                  ) : (
+                                    <span className="opacity-0">No Numbering</span>
+                                  )}
                                 </div>
                               </div>
                             ) : (
@@ -1550,7 +1520,7 @@ export function UserProfileForm() {
                                 <span className="text-slate-500">Role: <strong className="text-slate-800">{profile?.jobTitle || 'Signal Engineer'}</strong></span>
                               </div>
                               <div><strong className="text-slate-500">Date Range:</strong> 25/05/2026 to 25/05/2026</div>
-                              <div><strong className="text-slate-500">Employer:</strong> JMDR</div>
+                              <div><strong className="text-slate-500">Employer:</strong> Sample Rail Services</div>
                               <div><strong className="text-slate-500">FY Quarter:</strong> FY25/26 Q2</div>
                               <div><strong className="text-slate-500">Client:</strong> Transport for Tomorrow</div>
                               <div><strong className="text-slate-500">Location:</strong> Enfield Hub</div>
@@ -1644,7 +1614,7 @@ export function UserProfileForm() {
                         {/* Document Footer (with dynamic Page Numbering & Footer Note) */}
                         <div className="flex justify-between items-center text-gray-400 pt-1 border-t border-gray-50 font-mono" style={fs(4)}>
                           <span className="truncate max-w-[70%]">
-                            {pdfConfig.customFooterNote || 'Digital Signalling Logbook Exporter Pro'}
+                            {pdfConfig.customFooterNote || APP_NAME}
                           </span>
                           {pdfConfig.showPageNumbers !== false ? (
                             <span>Page 1 of 1</span>

@@ -47,7 +47,7 @@ export interface UserProfile {
     marginSize?: 'narrow' | 'standard' | 'wide';
     fontFamily?: 'helvetica' | 'times' | 'courier';
     fontSizeModifier?: 'sm' | 'md' | 'lg';
-    headerStyle?: 'accent-lines' | 'solid-banner' | 'bold-left' | 'jmdr-grid' | 'executive-pro';
+    headerStyle?: 'accent-lines' | 'solid-banner' | 'bold-left' | 'condensed-table' | 'executive-pro' | 'jmdr-grid';
     layoutSpacing?: 'relaxed' | 'compressed';
     showOwnerSignature?: boolean;
     showPageNumbers?: boolean;

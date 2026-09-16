@@ -63,6 +63,7 @@ export function SupervisorPortalModal({ initialToken, onClose, onSuccess }: Supe
         setLog(data);
         setSupervisorName(data.approvingSupervisor || data.verificationRequestedTo?.name || '');
         setSupervisorRiw(data.approvingSupervisorRiw || data.verificationRequestedTo?.riw || '');
+        setSupervisorComments(data.supervisorComments || '');
         if (!data.verificationPin) {
           setIsPinVerified(true);
         }
@@ -632,13 +633,16 @@ export function SupervisorPortalModal({ initialToken, onClose, onSuccess }: Supe
 
                 <div>
                   <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
-                    Supervisor Assessment Comments / Observations (Optional)
+                    Supervisor Observations (Assessment / Ref)
                   </label>
+                  <p className="text-[10px] text-gray-500 mb-1.5">
+                    This text is printed on the exported log in the Supervisor Observations column. Edit it as needed before signing.
+                  </p>
                   <textarea
-                    rows={2}
+                    rows={3}
                     value={supervisorComments}
                     onChange={(e) => setSupervisorComments(e.target.value)}
-                    placeholder="Add any specific assessment feedback or verification notes..."
+                    placeholder="e.g. Competence cross-referenced and verified."
                     className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-rail-blue outline-none"
                   />
                 </div>

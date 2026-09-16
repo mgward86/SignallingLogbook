@@ -24,6 +24,17 @@ import type { UserProfile } from './AuthContext';
 
 export type PdfConfig = NonNullable<UserProfile['pdfConfig']>;
 
+export const APP_NAME = 'Railway Signalling Logbook';
+
+export type HeaderStyle = 'accent-lines' | 'solid-banner' | 'bold-left' | 'condensed-table' | 'executive-pro';
+
+/** Maps stored/legacy header-style values (incl. old `jmdr-grid`) onto the current set. */
+export function resolveHeaderStyle(style?: string): HeaderStyle {
+  if (style === 'jmdr-grid' || style === 'condensed-table') return 'condensed-table';
+  if (style === 'solid-banner' || style === 'bold-left' || style === 'executive-pro') return style;
+  return 'accent-lines';
+}
+
 export interface PdfEquipment {
   category: string;
   subCategories: string[];
@@ -109,13 +120,13 @@ export function contrastRatio(hexA: string, hexB: string): number {
  * a header style respect a setting it previously ignored, remove it here.
  */
 export const HEADER_STYLE_UNSUPPORTED_KEYS: Record<string, (keyof PdfConfig)[]> = {
-  'jmdr-grid': ['layoutSpacing', 'showEquipment', 'showCertificationDetails', 'showOwnerSignature', 'showSupervisorComments'],
+  'condensed-table': ['layoutSpacing', 'showEquipment', 'showCertificationDetails', 'showOwnerSignature'],
   'executive-pro': ['showSupervisorComments'],
 };
 
 /** Header styles that force a fixed page orientation, ignoring the toggle. */
 export const HEADER_STYLE_LOCKED_ORIENTATION: Record<string, 'portrait' | 'landscape'> = {
-  'jmdr-grid': 'landscape',
+  'condensed-table': 'landscape',
 };
 
 export function resolveFamily(pdfConfig?: PdfConfig): 'helvetica' | 'times' | 'courier' {
@@ -131,7 +142,8 @@ export function resolveSizeMod(pdfConfig?: PdfConfig): number {
 }
 
 export function createPdfInstance(pdfConfig?: PdfConfig): jsPDF {
-  const orientation = pdfConfig?.pageOrientation === 'landscape' ? 'landscape' : 'portrait';
+  const locked = HEADER_STYLE_LOCKED_ORIENTATION[resolveHeaderStyle(pdfConfig?.headerStyle)];
+  const orientation = locked ?? (pdfConfig?.pageOrientation === 'landscape' ? 'landscape' : 'portrait');
   return new jsPDF({
     orientation,
     unit: 'mm',
@@ -142,7 +154,7 @@ export function createPdfInstance(pdfConfig?: PdfConfig): jsPDF {
 export function addDocumentFooters(doc: jsPDF, pdfConfig?: PdfConfig, logRef?: string): void {
   const [accentR, accentG, accentB] = hexToRgb(pdfConfig?.accentColor || '#003057');
   const showPageNumbers = pdfConfig?.showPageNumbers !== false;
-  const customFooterNote = pdfConfig?.customFooterNote || 'Digital Signalling Logbook Exporter Pro';
+  const customFooterNote = pdfConfig?.customFooterNote || APP_NAME;
   const totalPages = doc.getNumberOfPages();
   const family = resolveFamily(pdfConfig);
   const margin = resolveMargin(pdfConfig);
@@ -153,7 +165,7 @@ export function addDocumentFooters(doc: jsPDF, pdfConfig?: PdfConfig, logRef?: s
     const pageHeight = doc.internal.pageSize.getHeight();
 
     // Page 2+ Header for Executive Pro
-    if (i > 1 && pdfConfig?.headerStyle === 'executive-pro') {
+    if (i > 1 && resolveHeaderStyle(pdfConfig?.headerStyle) === 'executive-pro') {
       doc.setFillColor(30, 41, 59);
       doc.rect(margin, 6, pageWidth - margin * 2, 7.5, 'F');
 
@@ -246,7 +258,7 @@ export function generateLogPage(
   };
 
   // Header Style Render Branching
-  const headerStyle = pdfConfig?.headerStyle || 'accent-lines';
+  const headerStyle = resolveHeaderStyle(pdfConfig?.headerStyle);
 
   if (headerStyle === 'executive-pro') {
     // Executive Modern Pro Layout (Matches Attached Reference PDF)
@@ -744,8 +756,8 @@ export function generateLogPage(
     }
 
     return;
-  } else if (headerStyle === 'jmdr-grid') {
-    // Competency Work Experience Record (JMDR Grid Layout)
+  } else if (headerStyle === 'condensed-table') {
+    // Condensed Table — landscape competency grid, styled to match the other layouts
     const plainTextDescription = log.workDescription
       .replace(/<br\s*\/?>/g, '\n')
       .replace(/<\/p>/g, '\n')
@@ -760,57 +772,71 @@ export function generateLogPage(
       .replace(/\n\s*\n+/g, '\n')
       .trim();
 
-    // Top Header Block
+    const bannerY = 8;
+    const bannerHeight = 20;
+    const bannerW = pageWidth - margin * 2;
+    const thirdW = bannerW / 3;
+
+    doc.setFillColor(30, 41, 59);
+    doc.rect(margin, bannerY, bannerW, bannerHeight, 'F');
+    doc.setFillColor(accentR, accentG, accentB);
+    doc.rect(margin, bannerY + bannerHeight - 0.8, bannerW, 0.8, 'F');
+
+    setFont('normal', 5.5);
+    doc.setTextColor(148, 163, 184);
+    doc.text('EMPLOYER', margin + 4, bannerY + 6.5);
+    setFont('bold', 10);
+    doc.setTextColor(255, 255, 255);
+    const employerLines = doc.splitTextToSize(log.employer || 'N/A', thirdW - 8);
+    doc.text(employerLines, margin + 4, bannerY + 12.5);
+
+    setFont('bold', 10);
+    const titleLines = doc.splitTextToSize((pdfConfig?.title || 'SIGNALLING LOGBOOK').toUpperCase(), thirdW - 4);
+    doc.text(titleLines, pageWidth / 2, bannerY + 11.5, { align: 'center' });
+
+    setFont('normal', 5.5);
+    doc.setTextColor(148, 163, 184);
+    doc.text('LOG NUMBER', pageWidth - margin - 4, bannerY + 6.5, { align: 'right' });
+    setFont('bold', 11);
+    doc.setTextColor(255, 255, 255);
+    doc.text(log.logNumber || 'N/A', pageWidth - margin - 4, bannerY + 13.5, { align: 'right' });
+
     autoTable(doc, {
-      startY: 8,
-      body: [
-        [
-          {
-            content: log.employer || 'JMDR',
-            styles: { fontStyle: 'bold', halign: 'center', valign: 'middle', fillColor: [248, 238, 225], textColor: [accentR, accentG, accentB], fontSize: 9.5 * sizeMod }
-          },
-          {
-            content: (pdfConfig?.title || 'SIGNALS COMPETENCY WORK EXPERIENCE RECORD').toUpperCase(),
-            styles: { fontStyle: 'bold', halign: 'center', valign: 'middle', fontSize: 9 * sizeMod, textColor: [0, 0, 0] }
-          },
-          {
-            content: 'Version: 1\nEffective from: 1st February 2018',
-            styles: { halign: 'center', valign: 'middle', fontSize: 6.5 * sizeMod, textColor: [60, 60, 60] }
-          }
-        ],
-        [
-          {
-            content: `Work Experience Record Period:   ${log.quarter ? log.quarter + ': ' : ''}${log.startDate} - ${log.endDate}`,
-            colSpan: 3,
-            styles: { fontStyle: 'bold', fillColor: [248, 248, 248], textColor: [accentR, accentG, accentB], fontSize: 8 * sizeMod }
-          }
-        ],
-        [
-          {
-            content: `Name: ${profile?.displayName?.toUpperCase() || 'MATTHEW WARD'}`,
-            colSpan: 2,
-            styles: { fontStyle: 'bold', textColor: [0, 30, 90], fontSize: 8 * sizeMod }
-          },
-          {
-            content: `Identification Competency Reference (RIW): ${profile?.employeeId || '20-00069775'}`,
-            styles: { fontStyle: 'bold', halign: 'right', textColor: [0, 30, 90], fontSize: 8 * sizeMod }
-          }
-        ]
-      ],
+      startY: bannerY + bannerHeight + 1.5,
+      body: [[
+        {
+          content: `Work Experience Record Period:  ${log.quarter ? log.quarter + ': ' : ''}${log.startDate} – ${log.endDate}`,
+          styles: { textColor: [accentR, accentG, accentB] }
+        },
+        { content: `Name: ${profile?.displayName?.toUpperCase() || 'N/A'}` },
+        {
+          content: `Identification Competency Reference (RIW): ${profile?.employeeId || 'N/A'}`,
+          styles: { halign: 'right' }
+        }
+      ]],
       theme: 'grid',
-      styles: { font: family, cellPadding: 1.2, lineColor: [0, 0, 0], lineWidth: 0.3 },
-      margin: { left: margin, right: margin },
+      styles: {
+        font: family,
+        fontSize: 7.5 * sizeMod,
+        fontStyle: 'bold',
+        textColor: [30, 41, 59],
+        fillColor: [248, 250, 252],
+        lineColor: [226, 232, 240],
+        lineWidth: 0.25,
+        cellPadding: 1.8
+      },
       columnStyles: {
-        0: { cellWidth: 32 },
-        1: { cellWidth: pageWidth - margin * 2 - 82 },
-        2: { cellWidth: 50 }
-      }
+        0: { cellWidth: bannerW * 0.42 },
+        1: { cellWidth: bannerW * 0.28 },
+        2: { cellWidth: bannerW * 0.30 }
+      },
+      margin: { left: margin, right: margin }
     });
 
-    const gridStartY = (doc as any).lastAutoTable.finalY + 1.5;
+    const gridStartY = (doc as any).lastAutoTable.finalY + 2.5;
 
-    const datesCell = `${log.startDate} -\n${log.endDate}\n\nFinal Commissioning date: ${log.endDate}`;
-    const employerCell = `Employer:\n${log.employer || 'JMDR'}\n\nClient:\n${log.client || 'N/A'}\n\nInfrastructure Owner:\n${log.infrastructureOwner || 'N/A'}`;
+    const datesCell = `${log.startDate} –\n${log.endDate}\n\nFinal Commissioning date:\n${log.endDate}`;
+    const employerCell = `Employer:\n${log.employer || 'N/A'}\n\nClient:\n${log.client || 'N/A'}\n\nInfrastructure Owner:\n${log.infrastructureOwner || 'N/A'}`;
     const taskCell = `Role: ${log.role || 'N/A'}\nLocation: ${log.isLocationNA ? 'N/A' : (log.location || 'N/A')}\nProject: ${log.isProjectNA ? 'N/A' : (log.projectName || 'N/A')}\n\n${plainTextDescription}`;
 
     const equipCell = (log.equipment && log.equipment.length > 0)
@@ -820,82 +846,79 @@ export function generateLogPage(
         }).join('\n\n')
       : 'N/A';
 
-    const verifyCell = pdfConfig?.showSupervisor !== false
-      ? `${profile?.displayName || 'Adam Toffolo'}\n${profile?.employeeId || '20-0006492'}\nCommissioning Engineer\nPrincipal Engineer`
-      : 'N/A';
+    const verifyParts: string[] = [];
+    if (pdfConfig?.showSupervisor !== false) {
+      if (log.approvingSupervisor) verifyParts.push(log.approvingSupervisor);
+      if (log.approvingSupervisorRiw) verifyParts.push(log.approvingSupervisorRiw);
+      if (log.verificationSignedAt) {
+        try {
+          verifyParts.push(format(new Date(log.verificationSignedAt), 'dd/MM/yyyy'));
+        } catch {
+          /* ignore unparseable dates */
+        }
+      }
+    }
+    const verifyCell = verifyParts.length > 0 ? verifyParts.join('\n') : '—';
 
-    const isLandscape = pdfConfig?.pageOrientation === 'landscape';
+    const showObservations = pdfConfig?.showSupervisorComments !== false;
+    const observationsCell = (log.supervisorComments || '').trim() || '—';
+
+    const headRow = [
+      'Dates\n(From/To)',
+      'Employer/Client\nand Infrastructure Owner',
+      'Description of Task:\n(Description of Role(s) in competencies/levels)',
+      'Ref',
+      'Equipment or System Types',
+      'Verification Signature\n(Name & ID)',
+      ...(showObservations ? ['Supervisor Observations\n(Assessment / Ref)'] : [])
+    ];
+    const bodyRow = [
+      datesCell,
+      employerCell,
+      taskCell,
+      log.logNumber || 'N/A',
+      equipCell,
+      verifyCell,
+      ...(showObservations ? [observationsCell] : [])
+    ];
+
+    const obsW = showObservations ? 36 : 0;
+    const fixedW = 28 + 36 + 18 + 40 + 32 + obsW;
+    const taskW = Math.max(50, pageWidth - margin * 2 - fixedW);
 
     autoTable(doc, {
       startY: gridStartY,
-      head: [
-        [
-          'Dates\n(From/To)',
-          'Employer/Client\nand Infrastructure Owner',
-          'Description of Task:\n(Description of Role(s) in competencies/levels)',
-          'Ref',
-          'Equipment or System Types',
-          'Verification Signature\n(Name & ID)',
-          'Supervisor Observations\n(Assessment / Ref)'
-        ]
-      ],
-      body: [
-        [
-          datesCell,
-          employerCell,
-          taskCell,
-          log.logNumber || '01',
-          equipCell,
-          verifyCell,
-          'Competence cross-referenced and verified.'
-        ]
-      ],
+      head: [headRow],
+      body: [bodyRow],
       theme: 'grid',
-      headStyles: { fillColor: [235, 235, 235], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 7 * sizeMod, halign: 'center', font: family, cellPadding: 1.5 },
-      bodyStyles: { fontSize: 7 * sizeMod, font: family, textColor: [20, 20, 20], cellPadding: 2, valign: 'top' },
-      styles: { lineColor: [0, 0, 0], lineWidth: 0.3, overflow: 'linebreak' },
+      headStyles: {
+        fillColor: [241, 245, 249],
+        textColor: [accentR, accentG, accentB],
+        fontStyle: 'bold',
+        fontSize: 7 * sizeMod,
+        halign: 'center',
+        font: family,
+        cellPadding: 1.5
+      },
+      bodyStyles: {
+        fontSize: 7 * sizeMod,
+        font: family,
+        textColor: [30, 41, 59],
+        fillColor: [255, 255, 255],
+        cellPadding: 2,
+        valign: 'top'
+      },
+      styles: { lineColor: [226, 232, 240], lineWidth: 0.25, overflow: 'linebreak' },
       margin: { left: margin, right: margin },
-      columnStyles: isLandscape ? {
-        0: { cellWidth: 32 },
-        1: { cellWidth: 38 },
-        2: { cellWidth: Math.max(60, pageWidth - margin * 2 - 182) },
-        3: { cellWidth: 12, halign: 'center', fontStyle: 'bold' },
-        4: { cellWidth: 42 },
-        5: { cellWidth: 30 },
-        6: { cellWidth: 28 }
-      } : {
-        0: { cellWidth: 22 },
-        1: { cellWidth: 28 },
-        2: { cellWidth: Math.max(40, pageWidth - margin * 2 - 138) },
-        3: { cellWidth: 10, halign: 'center', fontStyle: 'bold' },
-        4: { cellWidth: 30 },
-        5: { cellWidth: 24 },
-        6: { cellWidth: 24 }
+      columnStyles: {
+        0: { cellWidth: 28 },
+        1: { cellWidth: 36 },
+        2: { cellWidth: taskW },
+        3: { cellWidth: 18, halign: 'center', fontStyle: 'bold' },
+        4: { cellWidth: 40 },
+        5: { cellWidth: 32 },
+        ...(showObservations ? { 6: { cellWidth: obsW } } : {})
       }
-    });
-
-    const gridEndY = (doc as any).lastAutoTable.finalY + 2;
-
-    // Footer Box
-    autoTable(doc, {
-      startY: Math.max(gridEndY, doc.internal.pageSize.getHeight() - 25),
-      body: [
-        [
-          { content: 'Approving Manager: Chief Engineer', styles: { halign: 'center' } },
-          { content: 'Approval Date: 01/02/2018', styles: { halign: 'center' } },
-          { content: 'Next Review Date: 01/02/2019', styles: { halign: 'center' } }
-        ],
-        [
-          {
-            content: 'PRINTOUT MAY NOT BE UP-TO-DATE: REFER TO METRO INTRANET FOR THE LATEST VERSION',
-            colSpan: 3,
-            styles: { fontStyle: 'bold', halign: 'center', textColor: [180, 0, 0], fontSize: 6 * sizeMod }
-          }
-        ]
-      ],
-      theme: 'grid',
-      styles: { font: family, fontSize: 6.5 * sizeMod, cellPadding: 1, lineColor: [0, 0, 0], lineWidth: 0.3, textColor: [80, 80, 80] },
-      margin: { left: margin, right: margin }
     });
 
     return;
