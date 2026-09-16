@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAuth } from '../lib/AuthContext';
 import { motion } from 'motion/react';
-import { BookOpen, ShieldCheck, Clock, FileText, AlertTriangle } from 'lucide-react';
+import { BookOpen, AlertTriangle } from 'lucide-react';
 
 export function Landing() {
   const { signIn, signingIn, authError } = useAuth();
@@ -27,26 +27,8 @@ export function Landing() {
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-rail-blue tracking-tight mb-2">Railway Signalling Logbook</h1>
           <p className="text-xs text-gray-400 font-mono uppercase tracking-widest font-bold">
-            Professional Digital Signalling Record
+            Professional Digital Signalling Record Keeping
           </p>
-        </div>
-
-        <div className="space-y-4 mb-8">
-          <FeatureItem 
-            icon={<ShieldCheck className="text-emerald-500 w-5 h-5 shrink-0" />} 
-            title="SOP Compliance" 
-            desc="Structured data entry following current railway & network safety standards." 
-          />
-          <FeatureItem 
-            icon={<Clock className="text-blue-500 w-5 h-5 shrink-0" />} 
-            title="Real-time Logging" 
-            desc="Automatic high-precision timestamps, duration checking, and drafting." 
-          />
-          <FeatureItem 
-            icon={<FileText className="text-amber-500 w-5 h-5 shrink-0" />} 
-            title="Audit Ready" 
-            desc="Instant beautifully branded PDF export and complete history search." 
-          />
         </div>
 
         <button
@@ -66,7 +48,7 @@ export function Landing() {
           ) : (
             <>
               <img referrerPolicy="no-referrer" src="https://www.google.com/favicon.ico" className="w-4 h-4 bg-white rounded-full shrink-0" alt="Google" />
-              Sign in with Work Account
+              Sign in
             </>
           )}
         </button>
@@ -80,23 +62,7 @@ export function Landing() {
             <p className="font-medium text-gray-600">{authError}</p>
           </div>
         )}
-        
-        <p className="mt-8 text-center text-[9px] text-gray-400 font-mono uppercase tracking-widest leading-relaxed">
-          Authorised personnel only. Access is monitored and logged.
-        </p>
       </motion.div>
-    </div>
-  );
-}
-
-function FeatureItem({ icon, title, desc }: { icon: React.ReactNode, title: string, desc: string }) {
-  return (
-    <div className="flex gap-4 items-start p-3.5 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-100/50 transition-all duration-200">
-      <div className="mt-0.5 p-1 bg-slate-100 rounded-xl">{icon}</div>
-      <div>
-        <h3 className="font-semibold text-sm text-gray-800 tracking-tight">{title}</h3>
-        <p className="text-xs text-gray-500 leading-relaxed mt-0.5">{desc}</p>
-      </div>
     </div>
   );
 }
