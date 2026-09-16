@@ -1,12 +1,76 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../lib/AuthContext';
-import { Settings, BadgeCheck, MapPin, Briefcase, Mail, Save, Loader2, Sparkles, Settings2, ShieldCheck, Info, X, Palette, Eye, RotateCcw, Check, Trash2, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { useAuth, type UserProfile } from '../lib/AuthContext';
+import { useConfig } from '../hooks/useConfig';
+import { Settings, BadgeCheck, MapPin, Briefcase, Mail, Save, Loader2, Sparkles, Settings2, ShieldCheck, Info, X, Palette, Eye, RotateCcw, Check, Trash2, AlertTriangle, ShieldAlert, FileText, LayoutGrid, ListChecks } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, writeBatch, doc, deleteDoc } from 'firebase/firestore';
+import { Capacitor } from '@capacitor/core';
+import {
+  createPdfInstance,
+  addDocumentFooters,
+  generateLogPage,
+  buildSamplePdfLogEntry,
+  isValidHex,
+  contrastRatio,
+  HEADER_STYLE_UNSUPPORTED_KEYS,
+  HEADER_STYLE_LOCKED_ORIENTATION,
+  type PdfConfig,
+} from '../lib/pdfGenerator';
+import { downloadPdf } from '../lib/pdfExport';
+
+/** Shared accessible toggle switch used throughout the PDF customiser — also carries a "why is this disabled" note for settings the current header style ignores. */
+function ToggleSwitch({
+  label,
+  description,
+  disabledNote,
+  checked,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  description: string;
+  disabledNote?: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className={`flex items-center justify-between p-3 bg-gray-50/50 rounded-xl border border-gray-100 transition ${disabled ? 'opacity-40' : ''}`}>
+      <div>
+        <p className="text-xs font-bold text-gray-800">{label}</p>
+        <p className={`text-[10px] font-medium ${disabled ? 'text-amber-600' : 'text-gray-400'}`}>
+          {disabled && disabledNote ? disabledNote : description}
+        </p>
+      </div>
+      <label className={`relative inline-flex items-center shrink-0 ml-4 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+        <input
+          type="checkbox"
+          role="switch"
+          aria-checked={checked}
+          aria-label={label}
+          checked={checked}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.checked)}
+          className="sr-only peer"
+        />
+        <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rail-blue peer-disabled:opacity-60"></div>
+      </label>
+    </div>
+  );
+}
+
+const HEADER_STYLE_LABELS: Record<string, string> = {
+  'executive-pro': 'Executive Modern Pro',
+  'accent-lines': 'Accent Lines',
+  'solid-banner': 'Solid Banner',
+  'bold-left': 'Left Accent Border',
+  'jmdr-grid': 'Competency Grid (JMDR)',
+};
 
 export function UserProfileForm() {
   const { user, profile, updateProfile, logOut } = useAuth();
+  const { config } = useConfig();
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'identity' | 'system'>('identity');
   
@@ -125,28 +189,63 @@ export function UserProfileForm() {
     };
   }, [isPanning]);
 
+  const DEFAULT_PDF_CONFIG: PdfConfig = {
+    title: 'SIGNALLING LOGBOOK',
+    subtitle: 'PROFESSIONAL DIGITAL SIGNALLING RECORD',
+    accentColor: '#003057',
+    showSupervisor: true,
+    supervisorTitle: 'SUPERVISOR VERIFICATION & COMMENTS',
+    supervisorDeclaration: 'I verify that the work described was performed safely and to industry standards.',
+    showEquipment: true,
+    showCertificationDetails: true,
+    pageOrientation: 'portrait',
+    marginSize: 'standard',
+    fontFamily: 'helvetica',
+    fontSizeModifier: 'md',
+    headerStyle: 'accent-lines',
+    layoutSpacing: 'relaxed',
+    showOwnerSignature: false,
+    showPageNumbers: true,
+    customFooterNote: '',
+    showSupervisorComments: true
+  };
+
+  const buildPdfConfigFromProfile = (source?: UserProfile['pdfConfig']): PdfConfig => ({
+    title: source?.title || DEFAULT_PDF_CONFIG.title,
+    subtitle: source?.subtitle || DEFAULT_PDF_CONFIG.subtitle,
+    accentColor: source?.accentColor || DEFAULT_PDF_CONFIG.accentColor,
+    showSupervisor: source?.showSupervisor !== false,
+    supervisorTitle: source?.supervisorTitle || DEFAULT_PDF_CONFIG.supervisorTitle,
+    supervisorDeclaration: source?.supervisorDeclaration || DEFAULT_PDF_CONFIG.supervisorDeclaration,
+    showEquipment: source?.showEquipment !== false,
+    showCertificationDetails: source?.showCertificationDetails !== false,
+    pageOrientation: source?.pageOrientation || DEFAULT_PDF_CONFIG.pageOrientation,
+    marginSize: source?.marginSize || DEFAULT_PDF_CONFIG.marginSize,
+    fontFamily: source?.fontFamily || DEFAULT_PDF_CONFIG.fontFamily,
+    fontSizeModifier: source?.fontSizeModifier || DEFAULT_PDF_CONFIG.fontSizeModifier,
+    headerStyle: source?.headerStyle || DEFAULT_PDF_CONFIG.headerStyle,
+    layoutSpacing: source?.layoutSpacing || DEFAULT_PDF_CONFIG.layoutSpacing,
+    showOwnerSignature: source?.showOwnerSignature || false,
+    showPageNumbers: source?.showPageNumbers !== false,
+    customFooterNote: source?.customFooterNote || '',
+    showSupervisorComments: source?.showSupervisorComments !== false
+  });
+
   const [isCustomizerOpen, setIsCustomizerOpen] = useState(false);
   const [isSavingPdfConfig, setIsSavingPdfConfig] = useState(false);
-  const [pdfConfig, setPdfConfig] = useState({
-    title: profile?.pdfConfig?.title || 'SIGNALLING LOGBOOK',
-    subtitle: profile?.pdfConfig?.subtitle || 'PROFESSIONAL DIGITAL SIGNALLING RECORD',
-    accentColor: profile?.pdfConfig?.accentColor || '#003057',
-    showSupervisor: profile?.pdfConfig?.showSupervisor !== false,
-    supervisorTitle: profile?.pdfConfig?.supervisorTitle || 'SUPERVISOR VERIFICATION & COMMENTS',
-    supervisorDeclaration: profile?.pdfConfig?.supervisorDeclaration || 'I verify that the work described was performed safely and to industry standards.',
-    showEquipment: profile?.pdfConfig?.showEquipment !== false,
-    showCertificationDetails: profile?.pdfConfig?.showCertificationDetails !== false,
-    pageOrientation: profile?.pdfConfig?.pageOrientation || 'portrait',
-    marginSize: profile?.pdfConfig?.marginSize || 'standard',
-    fontFamily: profile?.pdfConfig?.fontFamily || 'helvetica',
-    fontSizeModifier: profile?.pdfConfig?.fontSizeModifier || 'md',
-    headerStyle: profile?.pdfConfig?.headerStyle || 'accent-lines',
-    layoutSpacing: profile?.pdfConfig?.layoutSpacing || 'relaxed',
-    showOwnerSignature: profile?.pdfConfig?.showOwnerSignature || false,
-    showPageNumbers: profile?.pdfConfig?.showPageNumbers !== false,
-    customFooterNote: profile?.pdfConfig?.customFooterNote || '',
-    showSupervisorComments: profile?.pdfConfig?.showSupervisorComments !== false
-  });
+  const [customizerTab, setCustomizerTab] = useState<'design' | 'layout' | 'content'>('design');
+  const [pdfConfig, setPdfConfig] = useState<PdfConfig>(() => buildPdfConfigFromProfile(profile?.pdfConfig));
+
+  // Snapshot of pdfConfig taken when the customiser is opened (or right after
+  // a successful save) — compared against the live state to know whether
+  // there are unsaved changes, so we can warn before discarding them.
+  const savedPdfConfigRef = React.useRef<PdfConfig>(pdfConfig);
+  const isDirty = JSON.stringify(pdfConfig) !== JSON.stringify(savedPdfConfigRef.current);
+
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   const fontScale = pdfConfig.fontSizeModifier === 'sm' ? 0.9 : (pdfConfig.fontSizeModifier === 'lg' ? 1.1 : 1.0);
   const fs = (px: number) => ({ fontSize: `${(px * fontScale).toFixed(2)}px` });
@@ -154,33 +253,61 @@ export function UserProfileForm() {
   // Track profile changes to update pdfConfig on load or auth changes
   useEffect(() => {
     if (profile?.pdfConfig) {
-      setPdfConfig({
-        title: profile.pdfConfig.title || 'SIGNALLING LOGBOOK',
-        subtitle: profile.pdfConfig.subtitle || 'PROFESSIONAL DIGITAL SIGNALLING RECORD',
-        accentColor: profile.pdfConfig.accentColor || '#003057',
-        showSupervisor: profile.pdfConfig.showSupervisor !== false,
-        supervisorTitle: profile.pdfConfig.supervisorTitle || 'SUPERVISOR VERIFICATION & COMMENTS',
-        supervisorDeclaration: profile.pdfConfig.supervisorDeclaration || 'I verify that the work described was performed safely and to industry standards.',
-        showEquipment: profile.pdfConfig.showEquipment !== false,
-        showCertificationDetails: profile.pdfConfig.showCertificationDetails !== false,
-        pageOrientation: profile.pdfConfig.pageOrientation || 'portrait',
-        marginSize: profile.pdfConfig.marginSize || 'standard',
-        fontFamily: profile.pdfConfig.fontFamily || 'helvetica',
-        fontSizeModifier: profile.pdfConfig.fontSizeModifier || 'md',
-        headerStyle: profile.pdfConfig.headerStyle || 'accent-lines',
-        layoutSpacing: profile.pdfConfig.layoutSpacing || 'relaxed',
-        showOwnerSignature: profile.pdfConfig.showOwnerSignature || false,
-        showPageNumbers: profile.pdfConfig.showPageNumbers !== false,
-        customFooterNote: profile.pdfConfig.customFooterNote || '',
-        showSupervisorComments: profile.pdfConfig.showSupervisorComments !== false
-      });
+      const next = buildPdfConfigFromProfile(profile.pdfConfig);
+      setPdfConfig(next);
+      savedPdfConfigRef.current = next;
     }
   }, [profile?.pdfConfig]);
+
+  // Escape key closes the customiser (routed through the same
+  // dirty-check as every other close affordance).
+  useEffect(() => {
+    if (!isCustomizerOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showDiscardConfirm) {
+          setShowDiscardConfirm(false);
+        } else if (showResetConfirm) {
+          setShowResetConfirm(false);
+        } else {
+          requestCloseCustomizer();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCustomizerOpen, showDiscardConfirm, showResetConfirm, isDirty]);
+
+  const openCustomizer = () => {
+    savedPdfConfigRef.current = pdfConfig;
+    setCustomizerTab('design');
+    setShowDiscardConfirm(false);
+    setShowResetConfirm(false);
+    setPreviewError(null);
+    setIsCustomizerOpen(true);
+  };
+
+  /** Any attempt to close the modal (X, backdrop, Cancel, Escape) routes through here so unsaved edits aren't silently lost. */
+  const requestCloseCustomizer = () => {
+    if (isDirty) {
+      setShowDiscardConfirm(true);
+      return;
+    }
+    setIsCustomizerOpen(false);
+  };
+
+  const confirmDiscardAndClose = () => {
+    setPdfConfig(savedPdfConfigRef.current);
+    setShowDiscardConfirm(false);
+    setIsCustomizerOpen(false);
+  };
 
   const handleSavePdfConfig = async () => {
     setIsSavingPdfConfig(true);
     try {
       await updateProfile({ pdfConfig });
+      savedPdfConfigRef.current = pdfConfig;
       setIsCustomizerOpen(false);
     } catch (error) {
       console.error('Failed to save PDF custom settings: ', error);
@@ -190,27 +317,59 @@ export function UserProfileForm() {
   };
 
   const handleResetPdfConfig = () => {
-    setPdfConfig({
-      title: 'SIGNALLING LOGBOOK',
-      subtitle: 'PROFESSIONAL DIGITAL SIGNALLING RECORD',
-      accentColor: '#003057',
-      showSupervisor: true,
-      supervisorTitle: 'SUPERVISOR VERIFICATION & COMMENTS',
-      supervisorDeclaration: 'I verify that the work described was performed safely and to industry standards.',
-      showEquipment: true,
-      showCertificationDetails: true,
-      pageOrientation: 'portrait',
-      marginSize: 'standard',
-      fontFamily: 'helvetica',
-      fontSizeModifier: 'md',
-      headerStyle: 'accent-lines',
-      layoutSpacing: 'relaxed',
-      showOwnerSignature: false,
-      showPageNumbers: true,
-      customFooterNote: '',
-      showSupervisorComments: true
-    });
+    setPdfConfig(DEFAULT_PDF_CONFIG);
+    setShowResetConfirm(false);
   };
+
+  /**
+   * Generates the real, final PDF from the in-progress (not-yet-saved)
+   * settings using the exact same engine as the actual export flow
+   * (`../lib/pdfGenerator`), against a clearly-labelled sample entry. This
+   * exists because the mockup canvas to the right is a fast CSS
+   * approximation for instant feedback while dragging sliders — it is not
+   * pixel-accurate to the real PDF. This button is the guarantee: what you
+   * see here is byte-for-byte what technicians will get.
+   */
+  const handlePreviewRealPdf = async () => {
+    setIsGeneratingPreview(true);
+    setPreviewError(null);
+    try {
+      const sampleLog = buildSamplePdfLogEntry();
+      const doc = createPdfInstance(pdfConfig);
+      generateLogPage(doc, sampleLog, true, pdfConfig, profile, config?.categories);
+      addDocumentFooters(doc, pdfConfig, sampleLog.logNumber);
+
+      if (Capacitor.isNativePlatform()) {
+        await downloadPdf(doc, 'PDF_Template_Preview.pdf');
+      } else {
+        const blobUrl = doc.output('bloburl');
+        const win = window.open(blobUrl as unknown as string, '_blank');
+        if (!win) {
+          setPreviewError('Your browser blocked the preview pop-up. Please allow pop-ups for this site and try again.');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to generate real PDF preview:', error);
+      setPreviewError('Could not generate the preview PDF. Please check your settings and try again.');
+    } finally {
+      setIsGeneratingPreview(false);
+    }
+  };
+
+  // Settings the *currently selected* header style silently ignores — used
+  // to grey out + annotate those controls instead of letting them appear to
+  // do nothing when toggled. Keep in sync with `pdfGenerator.ts`.
+  const unsupportedKeys = HEADER_STYLE_UNSUPPORTED_KEYS[pdfConfig.headerStyle] || [];
+  const isSettingUnsupported = (key: keyof PdfConfig) => unsupportedKeys.includes(key);
+  const lockedOrientation = HEADER_STYLE_LOCKED_ORIENTATION[pdfConfig.headerStyle];
+  const activeHeaderStyleLabel = HEADER_STYLE_LABELS[pdfConfig.headerStyle] || 'this layout';
+
+  // Accent colour validation + a plain-English readability check against a
+  // white page background (every current header style renders this colour
+  // either as text-on-white or as a solid fill with white text on top).
+  const isHexValid = isValidHex(pdfConfig.accentColor);
+  const accentContrastOnWhite = isHexValid ? contrastRatio(pdfConfig.accentColor, '#FFFFFF') : null;
+  const showLowContrastWarning = accentContrastOnWhite !== null && accentContrastOnWhite < 2.5;
 
   const handleDeleteAccount = async () => {
     if (!user) return;
@@ -312,7 +471,7 @@ export function UserProfileForm() {
         </div>
         <button
           type="button"
-          onClick={() => setIsCustomizerOpen(true)}
+          onClick={openCustomizer}
           className="bg-rail-blue text-white hover:bg-opacity-95 px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all select-none shadow hover:shadow-md shrink-0"
         >
           Open Customiser Window
@@ -571,7 +730,7 @@ export function UserProfileForm() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setIsCustomizerOpen(false)}
+              onClick={requestCloseCustomizer}
               className="fixed inset-0 bg-black/60 backdrop-blur-sm"
               id="pdf-customizer-backdrop"
             />
@@ -584,6 +743,9 @@ export function UserProfileForm() {
               transition={{ type: 'spring', duration: 0.5 }}
               className="relative bg-white rounded-3xl shadow-2xl flex flex-col w-full max-w-5xl h-[90vh] lg:h-[85vh] max-h-[90vh] overflow-hidden border border-gray-100 z-10"
               id="pdf-customizer-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="pdf-customizer-title"
             >
               {/* Header */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50">
@@ -592,24 +754,93 @@ export function UserProfileForm() {
                     <Palette size={20} />
                   </div>
                   <div>
-                    <h3 className="font-bold text-gray-900 text-base">Customise PDF Export Template</h3>
+                    <h3 id="pdf-customizer-title" className="font-bold text-gray-900 text-base flex items-center gap-2">
+                      Customise PDF Export Template
+                      {isDirty && (
+                        <span className="text-[9px] font-bold text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-full uppercase tracking-wider">
+                          Unsaved changes
+                        </span>
+                      )}
+                    </h3>
                     <p className="text-[10px] text-gray-400 font-mono uppercase tracking-wider">Document Designer Window</p>
                   </div>
                 </div>
                 <button
-                  onClick={() => setIsCustomizerOpen(false)}
+                  onClick={requestCloseCustomizer}
                   className="p-1.5 hover:bg-gray-200 text-gray-400 hover:text-gray-600 rounded-lg transition"
                   type="button"
                   id="close-customizer-btn"
+                  aria-label="Close PDF template customiser"
                 >
                   <X size={20} />
                 </button>
+              </div>
+
+              {/* Discard-unsaved-changes confirmation banner */}
+              <AnimatePresence>
+                {showDiscardConfirm && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden shrink-0"
+                  >
+                    <div className="px-6 py-3 bg-amber-50 border-b border-amber-200 flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-2.5 text-amber-800">
+                        <AlertTriangle size={16} className="shrink-0" />
+                        <p className="text-xs font-semibold">You have unsaved changes. Discard them and close?</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setShowDiscardConfirm(false)}
+                          className="px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100 rounded-lg transition"
+                        >
+                          Keep Editing
+                        </button>
+                        <button
+                          type="button"
+                          onClick={confirmDiscardAndClose}
+                          className="px-3 py-1.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition"
+                        >
+                          Discard Changes
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Design / Layout / Content Tabs */}
+              <div className="flex items-center gap-1 px-6 pt-3 border-b border-gray-100 bg-gray-50/50 shrink-0" role="tablist" aria-label="PDF template settings sections">
+                {([
+                  { id: 'design', label: 'Design', icon: <Palette size={13} /> },
+                  { id: 'layout', label: 'Layout', icon: <LayoutGrid size={13} /> },
+                  { id: 'content', label: 'Content & Signatures', icon: <ListChecks size={13} /> },
+                ] as const).map(tab => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={customizerTab === tab.id}
+                    onClick={() => setCustomizerTab(tab.id)}
+                    className={`flex items-center gap-1.5 px-3.5 py-2.5 -mb-px text-xs font-bold rounded-t-lg border-b-2 transition ${
+                      customizerTab === tab.id
+                        ? 'text-rail-blue border-rail-blue bg-white'
+                        : 'text-gray-400 border-transparent hover:text-gray-600 hover:bg-gray-100/60'
+                    }`}
+                  >
+                    {tab.icon} {tab.label}
+                  </button>
+                ))}
               </div>
 
               {/* Main Content Area: Left Controls & Right Real-Time Mockup */}
               <div className="flex-1 overflow-y-auto lg:overflow-hidden min-h-0 p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 text-left">
                 {/* Form Controls (Left panel) */}
                 <div className="lg:col-span-6 space-y-6 lg:h-full lg:overflow-y-auto lg:pl-2 lg:pr-2">
+                  {customizerTab === 'design' && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
                   {/* Document Identity Section */}
                   <div className="space-y-4">
                     <h4 className="text-xs font-bold text-rail-blue uppercase tracking-wider border-b border-gray-100 pb-2 flex items-center gap-2">
@@ -639,6 +870,47 @@ export function UserProfileForm() {
                     </div>
                   </div>
 
+                  {/* Header Style — the biggest single visual decision, so it lives with the other Design controls */}
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-bold text-rail-blue uppercase tracking-wider border-b border-gray-100 pb-2 flex items-center gap-2">
+                      <LayoutGrid size={14} /> Header Style
+                    </h4>
+                    <div className="space-y-1.5">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                        {[
+                          { value: 'executive-pro', name: 'Executive Modern Pro' },
+                          { value: 'accent-lines', name: 'Accent Lines' },
+                          { value: 'solid-banner', name: 'Solid Banner' },
+                          { value: 'bold-left', name: 'Left Accent Border' },
+                          { value: 'jmdr-grid', name: 'Competency Grid (JMDR)' }
+                        ].map(opt => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setPdfConfig(c => ({
+                              ...c,
+                              headerStyle: opt.value as any,
+                              ...(HEADER_STYLE_LOCKED_ORIENTATION[opt.value] ? { pageOrientation: HEADER_STYLE_LOCKED_ORIENTATION[opt.value] } : {})
+                            }))}
+                            className={`py-2 px-1 rounded-xl border text-[11px] font-bold transition text-center cursor-pointer ${
+                              pdfConfig.headerStyle === opt.value
+                                ? 'border-rail-blue bg-rail-blue/5 text-rail-blue ring-2 ring-rail-blue/30 shadow-sm'
+                                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                            }`}
+                          >
+                            {opt.name}
+                          </button>
+                        ))}
+                      </div>
+                      {unsupportedKeys.length > 0 && (
+                        <p className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 flex items-start gap-1.5 mt-1.5">
+                          <Info size={12} className="shrink-0 mt-0.5" />
+                          <span>The <strong>{activeHeaderStyleLabel}</strong> style has a fixed layout — a few controls below are greyed out because it doesn't use them.</span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Themes & Accent Colours */}
                   <div className="space-y-4">
                     <h4 className="text-xs font-bold text-rail-blue uppercase tracking-wider border-b border-gray-100 pb-2 flex items-center gap-2">
@@ -660,6 +932,7 @@ export function UserProfileForm() {
                           onClick={() => setPdfConfig(c => ({ ...c, accentColor: preset.hex }))}
                           style={{ backgroundColor: preset.hex }}
                           title={preset.label}
+                          aria-label={`Use ${preset.label} accent colour`}
                           className={`w-8 h-8 rounded-full border-2 transition-all flex items-center justify-center ${
                             pdfConfig.accentColor.toLowerCase() === preset.hex.toLowerCase()
                               ? 'ring-2 ring-offset-2 ring-rail-blue scale-110 border-white'
@@ -681,24 +954,43 @@ export function UserProfileForm() {
                             type="text"
                             value={pdfConfig.accentColor}
                             onChange={(e) => setPdfConfig(c => ({ ...c, accentColor: e.target.value }))}
-                            className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:ring-4 focus:ring-rail-blue/5 focus:border-rail-blue transition font-mono"
+                            aria-invalid={!isHexValid}
+                            className={`w-full bg-gray-50 border rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:ring-4 transition font-mono ${
+                              isHexValid ? 'border-gray-200 focus:ring-rail-blue/5 focus:border-rail-blue' : 'border-red-300 focus:ring-red-500/10 focus:border-red-400'
+                            }`}
                             placeholder="#003057"
                           />
-                          <div className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border border-gray-200 shadow-sm" style={{ backgroundColor: pdfConfig.accentColor || '#000' }} />
+                          <div className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border border-gray-200 shadow-sm" style={{ backgroundColor: isHexValid ? pdfConfig.accentColor : '#e5e7eb' }} />
                         </div>
                       </div>
                       <div className="space-y-1 shrink-0">
                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block text-center">Picker</label>
                         <input
                           type="color"
-                          value={pdfConfig.accentColor.startsWith('#') && pdfConfig.accentColor.length === 7 ? pdfConfig.accentColor : '#003057'}
+                          aria-label="Pick a custom accent colour"
+                          value={isHexValid ? pdfConfig.accentColor : '#003057'}
                           onChange={(e) => setPdfConfig(c => ({ ...c, accentColor: e.target.value }))}
                           className="w-12 h-10 bg-gray-50 border border-gray-200 rounded-xl p-1 cursor-pointer"
                         />
                       </div>
                     </div>
+                    {!isHexValid && (
+                      <p className="text-[10px] text-red-600 flex items-center gap-1.5">
+                        <AlertTriangle size={11} /> Enter a valid 6-digit hex code, e.g. #003057. Using the default colour until this is fixed.
+                      </p>
+                    )}
+                    {showLowContrastWarning && (
+                      <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 flex items-start gap-1.5">
+                        <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                        <span>This colour is quite pale — it may be hard to read as text or as a background fill. Consider a darker shade for better legibility.</span>
+                      </p>
+                    )}
                   </div>
+                  </motion.div>
+                  )}
 
+                  {customizerTab === 'layout' && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
                   {/* Page Setup & Typography Layout Controls */}
                   <div className="space-y-4">
                     <h4 className="text-xs font-bold text-rail-blue uppercase tracking-wider border-b border-gray-100 pb-2 flex items-center gap-2">
@@ -706,66 +998,76 @@ export function UserProfileForm() {
                     </h4>
 
                     {/* Layout Spacing (Relaxed vs Compressed) */}
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Layout Spacing Mode</label>
+                    <fieldset disabled={isSettingUnsupported('layoutSpacing')} className="space-y-1.5 disabled:opacity-40">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                        Spacing
+                        {isSettingUnsupported('layoutSpacing') && <span className="text-amber-600 font-normal normal-case">— fixed by {activeHeaderStyleLabel}</span>}
+                      </label>
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
+                          disabled={isSettingUnsupported('layoutSpacing')}
                           onClick={() => setPdfConfig(c => ({ ...c, layoutSpacing: 'relaxed' }))}
-                          className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 ${
+                          className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 disabled:cursor-not-allowed ${
                             pdfConfig.layoutSpacing === 'relaxed' || !pdfConfig.layoutSpacing
                               ? 'border-rail-blue bg-rail-blue/5 text-rail-blue ring-1 ring-rail-blue'
                               : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
                           }`}
                         >
-                          Relaxed Formatting
+                          Relaxed
                         </button>
                         <button
                           type="button"
+                          disabled={isSettingUnsupported('layoutSpacing')}
                           onClick={() => setPdfConfig(c => ({ ...c, layoutSpacing: 'compressed' }))}
-                          className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 ${
+                          className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 disabled:cursor-not-allowed ${
                             pdfConfig.layoutSpacing === 'compressed'
                               ? 'border-rail-blue bg-rail-blue/5 text-rail-blue ring-1 ring-rail-blue'
                               : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
                           }`}
                         >
-                          Compressed Formatting
+                          Compressed
                         </button>
                       </div>
-                    </div>
+                    </fieldset>
 
                     {/* Page Orientation */}
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Page Layout Orientation</label>
+                    <fieldset disabled={!!lockedOrientation} className="space-y-1.5 disabled:opacity-40">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                        Page Orientation
+                        {lockedOrientation && <span className="text-amber-600 font-normal normal-case">— locked to {lockedOrientation} by {activeHeaderStyleLabel}</span>}
+                      </label>
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
+                          disabled={!!lockedOrientation}
                           onClick={() => setPdfConfig(c => ({ ...c, pageOrientation: 'portrait' }))}
-                          className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 ${
+                          className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 disabled:cursor-not-allowed ${
                             pdfConfig.pageOrientation === 'portrait'
                               ? 'border-rail-blue bg-rail-blue/5 text-rail-blue ring-1 ring-rail-blue'
                               : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
                           }`}
                         >
-                          Portrait Layout
+                          Portrait
                         </button>
                         <button
                           type="button"
+                          disabled={!!lockedOrientation}
                           onClick={() => setPdfConfig(c => ({ ...c, pageOrientation: 'landscape' }))}
-                          className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 ${
+                          className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 disabled:cursor-not-allowed ${
                             pdfConfig.pageOrientation === 'landscape'
                               ? 'border-rail-blue bg-rail-blue/5 text-rail-blue ring-1 ring-rail-blue'
                               : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
                           }`}
                         >
-                          Landscape Layout
+                          Landscape
                         </button>
                       </div>
-                    </div>
+                    </fieldset>
 
                     {/* Margin Size selection */}
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Document Margin Width</label>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Margins</label>
                       <div className="grid grid-cols-3 gap-2">
                         {[
                           { value: 'narrow', name: 'Narrow (10mm)' },
@@ -790,7 +1092,7 @@ export function UserProfileForm() {
 
                     {/* Font Family selection */}
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Document Font Typeface</label>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Font Typeface</label>
                       <div className="grid grid-cols-3 gap-2">
                         {[
                           { value: 'helvetica', name: 'Helvetica (Sans)' },
@@ -815,7 +1117,7 @@ export function UserProfileForm() {
 
                     {/* Font Size modifier */}
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Global Font Scaling Scale</label>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Font Size</label>
                       <div className="grid grid-cols-3 gap-2">
                         {[
                           { value: 'sm', name: 'Compact (90%)' },
@@ -837,129 +1139,58 @@ export function UserProfileForm() {
                         ))}
                       </div>
                     </div>
-
-                    {/* Header Layout Styles */}
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Header &amp; Layout Style Variant</label>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-                        {[
-                          { value: 'executive-pro', name: 'Executive Modern Pro' },
-                          { value: 'accent-lines', name: 'Accent Lines' },
-                          { value: 'solid-banner', name: 'Solid Banner' },
-                          { value: 'bold-left', name: 'Left Accent Border' },
-                          { value: 'jmdr-grid', name: 'Competency Grid (JMDR)' }
-                        ].map(opt => (
-                          <button
-                            key={opt.value}
-                            type="button"
-                            onClick={() => setPdfConfig(c => ({
-                              ...c,
-                              headerStyle: opt.value as any,
-                              ...(opt.value === 'jmdr-grid' ? { pageOrientation: 'landscape' } : {})
-                            }))}
-                            className={`py-2 px-1 rounded-xl border text-[11px] font-bold transition text-center cursor-pointer ${
-                              pdfConfig.headerStyle === opt.value
-                                ? 'border-rail-blue bg-rail-blue/5 text-rail-blue ring-2 ring-rail-blue/30 shadow-sm'
-                                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-                            }`}
-                          >
-                            {opt.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
                   </div>
+                  </motion.div>
+                  )}
 
+                  {customizerTab === 'content' && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
                   {/* Section Toggles */}
                   <div className="space-y-4">
                     <h4 className="text-xs font-bold text-rail-blue uppercase tracking-wider border-b border-gray-100 pb-2 flex items-center gap-2">
                       <Info size={14} /> Optional Form Sections & Signatures
                     </h4>
 
-                    {/* Show Equipment Table */}
-                    <div className="flex items-center justify-between p-3 bg-gray-50/50 rounded-xl border border-gray-100">
-                      <div>
-                        <p className="text-xs font-bold text-gray-800">Equipment Identification Table</p>
-                        <p className="text-[10px] text-gray-400 font-medium">Include category & sub-category item mappings</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
-                        <input
-                          type="checkbox"
-                          checked={pdfConfig.showEquipment}
-                          onChange={(e) => setPdfConfig(c => ({ ...c, showEquipment: e.target.checked }))}
-                          className="sr-only peer"
-                        />
-                        <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rail-blue"></div>
-                      </label>
-                    </div>
+                    <ToggleSwitch
+                      label="Equipment Identification Table"
+                      description="Include category & sub-category item mappings"
+                      disabledNote={`Always shown in the ${activeHeaderStyleLabel} layout`}
+                      checked={pdfConfig.showEquipment}
+                      disabled={isSettingUnsupported('showEquipment')}
+                      onChange={(v) => setPdfConfig(c => ({ ...c, showEquipment: v }))}
+                    />
 
-                    {/* Show Personal Identity Certification Details */}
-                    <div className="flex items-center justify-between p-3 bg-gray-50/50 rounded-xl border border-gray-100">
-                      <div>
-                        <p className="text-xs font-bold text-gray-800">Logbook Owner Header Details</p>
-                        <p className="text-[10px] text-gray-400 font-medium">Add signature name, RIW ID & certification metrics to header</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
-                        <input
-                          type="checkbox"
-                          checked={pdfConfig.showCertificationDetails}
-                          onChange={(e) => setPdfConfig(c => ({ ...c, showCertificationDetails: e.target.checked }))}
-                          className="sr-only peer"
-                        />
-                        <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rail-blue"></div>
-                      </label>
-                    </div>
+                    <ToggleSwitch
+                      label="Logbook Owner Header Details"
+                      description="Add your name, RIW ID & job title to the header"
+                      disabledNote={`Not used by the ${activeHeaderStyleLabel} layout`}
+                      checked={pdfConfig.showCertificationDetails}
+                      disabled={isSettingUnsupported('showCertificationDetails')}
+                      onChange={(v) => setPdfConfig(c => ({ ...c, showCertificationDetails: v }))}
+                    />
 
-                    {/* Show Technician Owner Custom Signature */}
-                    <div className="flex items-center justify-between p-3 bg-gray-50/50 rounded-xl border border-gray-100">
-                      <div>
-                        <p className="text-xs font-bold text-gray-800">Self Technician Signature Block</p>
-                        <p className="text-[10px] text-gray-400 font-medium">Include technician sign-off box line below description</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
-                        <input
-                          type="checkbox"
-                          checked={pdfConfig.showOwnerSignature}
-                          onChange={(e) => setPdfConfig(c => ({ ...c, showOwnerSignature: e.target.checked }))}
-                          className="sr-only peer"
-                        />
-                        <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rail-blue"></div>
-                      </label>
-                    </div>
+                    <ToggleSwitch
+                      label="Technician Sign-Off Box"
+                      description="Include a self-certification signature line below the description"
+                      disabledNote={`Not used by the ${activeHeaderStyleLabel} layout`}
+                      checked={pdfConfig.showOwnerSignature}
+                      disabled={isSettingUnsupported('showOwnerSignature')}
+                      onChange={(v) => setPdfConfig(c => ({ ...c, showOwnerSignature: v }))}
+                    />
 
-                    {/* Show Page Numbers */}
-                    <div className="flex items-center justify-between p-3 bg-gray-50/50 rounded-xl border border-gray-100">
-                      <div>
-                        <p className="text-xs font-bold text-gray-800">Automatic Page Numbering</p>
-                        <p className="text-[10px] text-gray-400 font-medium">Add sequential page indexing to the document footers</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
-                        <input
-                          type="checkbox"
-                          checked={pdfConfig.showPageNumbers}
-                          onChange={(e) => setPdfConfig(c => ({ ...c, showPageNumbers: e.target.checked }))}
-                          className="sr-only peer"
-                        />
-                        <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rail-blue"></div>
-                      </label>
-                    </div>
+                    <ToggleSwitch
+                      label="Page Numbers"
+                      description="Add sequential page numbers to the document footer"
+                      checked={pdfConfig.showPageNumbers}
+                      onChange={(v) => setPdfConfig(c => ({ ...c, showPageNumbers: v }))}
+                    />
 
-                    {/* Show Supervisor Section */}
-                    <div className="flex items-center justify-between p-3 bg-gray-50/50 rounded-xl border border-gray-100">
-                      <div>
-                        <p className="text-xs font-bold text-gray-800">Supervisor Verification Panel</p>
-                        <p className="text-[10px] text-gray-400 font-medium font-sans">Include signature box lines & custom verification checklists</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
-                        <input
-                          type="checkbox"
-                          checked={pdfConfig.showSupervisor}
-                          onChange={(e) => setPdfConfig(c => ({ ...c, showSupervisor: e.target.checked }))}
-                          className="sr-only peer"
-                        />
-                        <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rail-blue"></div>
-                      </label>
-                    </div>
+                    <ToggleSwitch
+                      label="Supervisor Verification Panel"
+                      description="Include a supervisor sign-off block with name, RIW ID, signature & date"
+                      checked={pdfConfig.showSupervisor}
+                      onChange={(v) => setPdfConfig(c => ({ ...c, showSupervisor: v }))}
+                    />
 
                     <AnimatePresence>
                       {pdfConfig.showSupervisor && (
@@ -969,46 +1200,17 @@ export function UserProfileForm() {
                           exit={{ opacity: 0, height: 0 }}
                           className="space-y-4 pl-4 border-l-2 border-rail-blue/20 overflow-hidden pt-2"
                         >
-                          {/* Toggle for supervisor comments */}
-                          <div className="flex items-center justify-between p-2.5 bg-gray-50/50 rounded-xl border border-gray-100">
-                            <div>
-                              <p className="text-xs font-bold text-gray-800">Supervisor Comments Space</p>
-                              <p className="text-[10px] text-gray-400 font-medium">Include space for supervisor hand-written comments</p>
-                            </div>
-                            <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
-                              <input
-                                type="checkbox"
-                                checked={pdfConfig.showSupervisorComments !== false}
-                                onChange={(e) => {
-                                  const enabled = e.target.checked;
-                                  setPdfConfig(c => {
-                                    let newTitle = c.supervisorTitle;
-                                    if (!enabled) {
-                                      newTitle = newTitle
-                                        .replace(/\s*(?:&|and)\s*comments\b/gi, '')
-                                        .replace(/\s*-\s*comments\b/gi, '')
-                                        .trim();
-                                    } else {
-                                      if (!/comments/i.test(newTitle)) {
-                                        const isAllCaps = newTitle === newTitle.toUpperCase();
-                                        newTitle = newTitle + (isAllCaps ? ' & COMMENTS' : ' & Comments');
-                                      }
-                                    }
-                                    return {
-                                      ...c,
-                                      showSupervisorComments: enabled,
-                                      supervisorTitle: newTitle
-                                    };
-                                  });
-                                }}
-                                className="sr-only peer"
-                              />
-                              <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rail-blue"></div>
-                            </label>
-                          </div>
+                          <ToggleSwitch
+                            label="Supervisor Comments Space"
+                            description="Include a lined space for the supervisor's hand-written comments"
+                            disabledNote={`Always shown in the ${activeHeaderStyleLabel} layout`}
+                            checked={pdfConfig.showSupervisorComments !== false}
+                            disabled={isSettingUnsupported('showSupervisorComments')}
+                            onChange={(v) => setPdfConfig(c => ({ ...c, showSupervisorComments: v }))}
+                          />
 
                           <div className="space-y-1.5">
-                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Verification Header Title</label>
+                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Panel Title</label>
                             <input
                               type="text"
                               value={pdfConfig.supervisorTitle}
@@ -1018,7 +1220,7 @@ export function UserProfileForm() {
                           </div>
 
                           <div className="space-y-1.5">
-                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Declaration Text Statement</label>
+                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Declaration Text</label>
                             <textarea
                               rows={2}
                               value={pdfConfig.supervisorDeclaration}
@@ -1033,7 +1235,7 @@ export function UserProfileForm() {
                     {/* Custom Audit Footnotes Reference Codes input */}
                     <div className="space-y-1.5 pt-2">
                       <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
-                        <Info size={12} /> Custom Footer Audit Notes / compliance codes
+                        <Info size={12} /> Footer Note
                       </label>
                       <input
                         type="text"
@@ -1042,18 +1244,44 @@ export function UserProfileForm() {
                         className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs outline-none focus:ring-4 focus:ring-rail-blue/5 focus:border-rail-blue transition"
                         placeholder="e.g. Reference Signal Interlocking Code AS7637 / Approved RTO 109"
                       />
+                      <p className="text-[10px] text-gray-400">Shown on every page footer — handy for audit references or approved RTO/compliance codes.</p>
                     </div>
                   </div>
+                  </motion.div>
+                  )}
                 </div>
 
                 {/* Live Mockup/Preview (Right panel) */}
                 <div className="lg:col-span-6 flex flex-col h-full lg:overflow-hidden">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2 text-gray-500 text-xs font-bold uppercase tracking-wider animate-pulse">
-                      <Eye size={14} className="text-rail-blue" /> Live Designer Canvas Mockup
+                  <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 text-gray-500 text-xs font-bold uppercase tracking-wider">
+                      <Eye size={14} className="text-rail-blue" /> Quick Preview
                     </div>
-                    <span className="text-[10px] bg-rail-blue/10 text-rail-blue px-2.5 py-0.5 rounded-full font-mono uppercase font-bold">A4 Page Representation</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] bg-rail-blue/10 text-rail-blue px-2.5 py-0.5 rounded-full font-mono uppercase font-bold">A4 Page Representation</span>
+                      <button
+                        type="button"
+                        onClick={handlePreviewRealPdf}
+                        disabled={isGeneratingPreview}
+                        className="flex items-center gap-1.5 bg-rail-blue text-white px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider hover:bg-opacity-90 transition disabled:opacity-60"
+                        title="Generate the exact PDF these settings will produce, using a sample entry"
+                      >
+                        {isGeneratingPreview ? <Loader2 size={11} className="animate-spin" /> : <FileText size={11} />}
+                        Preview Real PDF
+                      </button>
+                    </div>
                   </div>
+
+                  <p className="text-[10px] text-gray-400 leading-relaxed mb-2 flex items-start gap-1.5">
+                    <Info size={11} className="shrink-0 mt-0.5" />
+                    <span>The canvas below is a fast, approximate sketch for quick tweaking — it can differ slightly from the real PDF. Click <strong className="text-gray-500">Preview Real PDF</strong> above to generate the exact file (using a sample entry) before saving.</span>
+                  </p>
+
+                  {previewError && (
+                    <p className="text-[10px] text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-2 flex items-start gap-1.5">
+                      <AlertTriangle size={11} className="shrink-0 mt-0.5" /> {previewError}
+                    </p>
+                  )}
                   
                   <div className="flex-1 bg-gray-100 rounded-2xl border border-gray-200/60 shadow-inner relative flex flex-col min-h-[300px] lg:min-h-0 overflow-hidden">
                     {/* Zoom Slider Control */}
@@ -1069,6 +1297,7 @@ export function UserProfileForm() {
                         step="0.05" 
                         value={zoomLevel} 
                         onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
+                        aria-label="Zoom preview canvas"
                         className="w-16 accent-rail-blue cursor-pointer h-1 rounded-lg bg-gray-200 appearance-none"
                       />
                       <span className="font-mono text-gray-700 w-8 text-right">{Math.round(zoomLevel * 100)}%</span>
@@ -1077,6 +1306,7 @@ export function UserProfileForm() {
                           onClick={() => setZoomLevel(1)} 
                           className="text-gray-400 hover:text-rail-blue transition ml-0.5 cursor-pointer"
                           title="Reset Zoom"
+                          aria-label="Reset zoom to 100%"
                         >
                           <RotateCcw size={10} />
                         </button>
@@ -1435,10 +1665,39 @@ export function UserProfileForm() {
         </div>
 
               {/* Action Buttons */}
-              <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+              <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between relative">
+                <AnimatePresence>
+                  {showResetConfirm && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 6 }}
+                      className="absolute bottom-full left-6 mb-2 bg-white border border-amber-200 shadow-xl rounded-xl p-3 w-72 z-20 text-left"
+                    >
+                      <p className="text-xs font-bold text-gray-800 mb-1">Reset all customisation?</p>
+                      <p className="text-[10px] text-gray-500 mb-3">This clears every field on this form — including custom wording — back to the default template. It cannot be undone (unless you Cancel without saving).</p>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowResetConfirm(false)}
+                          className="px-3 py-1.5 text-[11px] font-bold text-gray-500 hover:bg-gray-100 rounded-lg transition"
+                        >
+                          Keep Current
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleResetPdfConfig}
+                          className="px-3 py-1.5 text-[11px] font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition"
+                        >
+                          Reset Everything
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
                 <button
                   type="button"
-                  onClick={handleResetPdfConfig}
+                  onClick={() => setShowResetConfirm(true)}
                   className="flex items-center gap-1.5 px-4 py-2 hover:bg-gray-200 text-gray-600 rounded-xl text-xs font-bold transition select-none disabled:opacity-50"
                   id="reset-customizer-btn"
                 >
@@ -1449,7 +1708,7 @@ export function UserProfileForm() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setIsCustomizerOpen(false)}
+                    onClick={requestCloseCustomizer}
                     className="px-4 py-2 border border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-600 rounded-xl text-xs font-bold transition select-none"
                     id="cancel-customizer-btn"
                   >
@@ -1457,10 +1716,11 @@ export function UserProfileForm() {
                   </button>
                   <button
                     type="button"
-                    disabled={isSavingPdfConfig}
+                    disabled={isSavingPdfConfig || !isDirty}
                     onClick={handleSavePdfConfig}
                     className="bg-rail-blue text-white hover:bg-opacity-90 px-6 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition select-none disabled:opacity-50"
                     id="save-customizer-btn"
+                    title={!isDirty ? 'No changes to save yet' : undefined}
                   >
                     {isSavingPdfConfig ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                     Save Customisation
