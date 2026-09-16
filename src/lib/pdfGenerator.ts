@@ -773,11 +773,11 @@ export function generateLogPage(
       .trim();
 
     const headerTop = 8;
-    const headerBottom = 30;
+    const headerBottom = 19;
     const bannerW = pageWidth - margin * 2;
 
     doc.setDrawColor(accentR, accentG, accentB);
-    doc.setLineWidth(2.5);
+    doc.setLineWidth(2);
     doc.line(margin + 1, headerTop, margin + 1, headerBottom);
 
     doc.setDrawColor(220, 220, 220);
@@ -785,19 +785,19 @@ export function generateLogPage(
     doc.line(margin, headerBottom, pageWidth - margin, headerBottom);
 
     doc.setTextColor(accentR, accentG, accentB);
-    setFont('bold', 16);
-    doc.text((pdfConfig?.title || 'SIGNALLING LOGBOOK').toUpperCase(), margin + 5, 18);
+    setFont('bold', 13);
+    doc.text((pdfConfig?.title || 'SIGNALLING LOGBOOK').toUpperCase(), margin + 5, 13.5);
 
-    setFont('normal', 7);
+    setFont('normal', 6.5);
     doc.setTextColor(100, 100, 100);
-    doc.text(log.employer || 'N/A', margin + 5, 24);
+    doc.text(log.employer || 'N/A', margin + 5, 17.5);
 
     doc.setTextColor(accentR, accentG, accentB);
-    setFont('bold', 10);
-    doc.text(`LOG #: ${log.logNumber || 'N/A'}`, pageWidth - margin, 18, { align: 'right' });
+    setFont('bold', 9);
+    doc.text(`LOG #: ${log.logNumber || 'N/A'}`, pageWidth - margin, 13.5, { align: 'right' });
 
     autoTable(doc, {
-      startY: headerBottom + 1.5,
+      startY: headerBottom + 0.8,
       body: [[
         {
           content: `Work Experience Record Period:  ${log.quarter ? log.quarter + ': ' : ''}${log.startDate} – ${log.endDate}`,
@@ -812,13 +812,13 @@ export function generateLogPage(
       theme: 'grid',
       styles: {
         font: family,
-        fontSize: 7.5 * sizeMod,
+        fontSize: 7 * sizeMod,
         fontStyle: 'bold',
         textColor: [30, 41, 59],
         fillColor: [248, 250, 252],
         lineColor: [226, 232, 240],
         lineWidth: 0.25,
-        cellPadding: 1.8
+        cellPadding: 1
       },
       columnStyles: {
         0: { cellWidth: bannerW * 0.42 },
@@ -828,10 +828,10 @@ export function generateLogPage(
       margin: { left: margin, right: margin }
     });
 
-    const gridStartY = (doc as any).lastAutoTable.finalY + 2.5;
+    const gridStartY = (doc as any).lastAutoTable.finalY + 1.2;
 
-    const datesCell = `${log.startDate} –\n${log.endDate}\n\nFinal Commissioning date:\n${log.endDate}`;
-    const employerCell = `Employer:\n${log.employer || 'N/A'}\n\nClient:\n${log.client || 'N/A'}\n\nInfrastructure Owner:\n${log.infrastructureOwner || 'N/A'}`;
+    const datesCell = `${log.startDate} – ${log.endDate}\nFinal Commissioning date: ${log.endDate}`;
+    const employerCell = `Employer: ${log.employer || 'N/A'}\nClient: ${log.client || 'N/A'}\nInfrastructure Owner: ${log.infrastructureOwner || 'N/A'}`;
     const taskCell = `Role: ${log.role || 'N/A'}\nLocation: ${log.isLocationNA ? 'N/A' : (log.location || 'N/A')}\nProject: ${log.isProjectNA ? 'N/A' : (log.projectName || 'N/A')}\n\n${plainTextDescription}`;
 
     const equipCell = (log.equipment && log.equipment.length > 0)
@@ -890,17 +890,17 @@ export function generateLogPage(
         fillColor: [241, 245, 249],
         textColor: [accentR, accentG, accentB],
         fontStyle: 'bold',
-        fontSize: 7 * sizeMod,
+        fontSize: 6.5 * sizeMod,
         halign: 'center',
         font: family,
-        cellPadding: 1.5
+        cellPadding: 1
       },
       bodyStyles: {
-        fontSize: 7 * sizeMod,
+        fontSize: 6.5 * sizeMod,
         font: family,
         textColor: [30, 41, 59],
         fillColor: [255, 255, 255],
-        cellPadding: 2,
+        cellPadding: 1.2,
         valign: 'top'
       },
       styles: { lineColor: [226, 232, 240], lineWidth: 0.25, overflow: 'linebreak' },

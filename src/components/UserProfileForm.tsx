@@ -1350,22 +1350,22 @@ export function UserProfileForm() {
                           >
                             {resolvedHeaderStyle === 'condensed-table' ? (
                               <div className="flex flex-col justify-between h-full font-sans overflow-hidden leading-tight text-slate-800">
-                                <div className="space-y-1.5">
-                                  <div className="flex gap-2.5 mb-1 pl-2.5 border-l-4 text-left py-0.5" style={{ borderLeftColor: pdfConfig.accentColor || '#003057' }}>
+                                <div className="space-y-1">
+                                  <div className="flex gap-2 pl-2 border-l-[3px] text-left py-0 leading-none" style={{ borderLeftColor: pdfConfig.accentColor || '#003057' }}>
                                     <div className="flex-1 min-w-0">
-                                      <span className="font-extrabold tracking-tight block" style={{ color: pdfConfig.accentColor || '#003057', ...fs(9) }}>
+                                      <span className="font-extrabold tracking-tight block" style={{ color: pdfConfig.accentColor || '#003057', ...fs(8) }}>
                                         {pdfConfig.title || 'SIGNALLING LOGBOOK'}
                                       </span>
-                                      <span className="text-gray-400 block tracking-widest font-medium leading-none mt-0.5" style={fs(5)}>
+                                      <span className="text-gray-400 block tracking-widest font-medium mt-px" style={fs(4.5)}>
                                         Sample Rail Services
                                       </span>
                                     </div>
-                                    <div className="text-right leading-none shrink-0 font-mono" style={fs(6)}>
+                                    <div className="text-right shrink-0 font-mono self-center" style={fs(5.5)}>
                                       <span className="font-bold" style={{ color: pdfConfig.accentColor || '#003057' }}>LOG #: LOG-0125</span>
                                     </div>
                                   </div>
 
-                                  <div className="flex justify-between gap-2 bg-slate-50 border border-slate-200 px-2 py-1 font-semibold" style={fs(4)}>
+                                  <div className="flex justify-between gap-2 bg-slate-50 border border-slate-200 px-1.5 py-0.5 font-semibold" style={fs(3.8)}>
                                     <span style={{ color: pdfConfig.accentColor || '#003057' }}>Work Experience Record Period: Q2: 17/09/2026 – 17/09/2026</span>
                                     <span>Name: {profile?.displayName?.toUpperCase() || 'MATTHEW WARD'}</span>
                                     <span>RIW: {profile?.employeeId || '20-00069775'}</span>
