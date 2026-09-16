@@ -63,11 +63,11 @@ function ToggleSwitch({
 }
 
 const HEADER_STYLE_LABELS: Record<string, string> = {
-  'executive-pro': 'Executive Modern Pro',
-  'accent-lines': 'Accent Lines',
-  'solid-banner': 'Solid Banner',
-  'bold-left': 'Left Accent Border',
   'condensed-table': 'Condensed Table',
+  'executive-pro': 'Executive Modern',
+  'accent-lines': 'Accent Lines',
+  'bold-left': 'Left Accent Border',
+  'solid-banner': 'Solid Banner',
 };
 
 export function UserProfileForm() {
@@ -879,13 +879,13 @@ export function UserProfileForm() {
                       <LayoutGrid size={14} /> Header Style
                     </h4>
                     <div className="space-y-1.5">
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                         {[
-                          { value: 'executive-pro', name: 'Executive Modern Pro' },
+                          { value: 'condensed-table', name: 'Condensed Table' },
+                          { value: 'executive-pro', name: 'Executive Modern' },
                           { value: 'accent-lines', name: 'Accent Lines' },
-                          { value: 'solid-banner', name: 'Solid Banner' },
                           { value: 'bold-left', name: 'Left Accent Border' },
-                          { value: 'condensed-table', name: 'Condensed Table' }
+                          ...(resolvedHeaderStyle === 'solid-banner' ? [{ value: 'solid-banner', name: 'Solid Banner' }] : []),
                         ].map(opt => (
                           <button
                             key={opt.value}
@@ -1351,17 +1351,17 @@ export function UserProfileForm() {
                             {resolvedHeaderStyle === 'condensed-table' ? (
                               <div className="flex flex-col justify-between h-full font-sans overflow-hidden leading-tight text-slate-800">
                                 <div className="space-y-1.5">
-                                  <div className="bg-slate-800 text-white px-2 py-1.5 flex justify-between items-center gap-2" style={{ borderBottom: `2px solid ${pdfConfig.accentColor || '#003057'}` }}>
-                                    <div className="min-w-0 flex-1">
-                                      <div className="uppercase tracking-widest text-slate-400 font-semibold" style={fs(3.2)}>Employer</div>
-                                      <div className="font-extrabold truncate" style={fs(7)}>Sample Rail Services</div>
+                                  <div className="flex gap-2.5 mb-1 pl-2.5 border-l-4 text-left py-0.5" style={{ borderLeftColor: pdfConfig.accentColor || '#003057' }}>
+                                    <div className="flex-1 min-w-0">
+                                      <span className="font-extrabold tracking-tight block" style={{ color: pdfConfig.accentColor || '#003057', ...fs(9) }}>
+                                        {pdfConfig.title || 'SIGNALLING LOGBOOK'}
+                                      </span>
+                                      <span className="text-gray-400 block tracking-widest font-medium leading-none mt-0.5" style={fs(5)}>
+                                        Sample Rail Services
+                                      </span>
                                     </div>
-                                    <div className="font-extrabold uppercase tracking-tight text-center shrink-0 px-2" style={fs(6.5)}>
-                                      {pdfConfig.title || 'SIGNALLING LOGBOOK'}
-                                    </div>
-                                    <div className="text-right min-w-0 flex-1">
-                                      <div className="uppercase tracking-widest text-slate-400 font-semibold" style={fs(3.2)}>Log Number</div>
-                                      <div className="font-bold font-mono" style={fs(7)}>LOG-0125</div>
+                                    <div className="text-right leading-none shrink-0 font-mono" style={fs(6)}>
+                                      <span className="font-bold" style={{ color: pdfConfig.accentColor || '#003057' }}>LOG #: LOG-0125</span>
                                     </div>
                                   </div>
 

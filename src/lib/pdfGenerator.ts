@@ -772,37 +772,32 @@ export function generateLogPage(
       .replace(/\n\s*\n+/g, '\n')
       .trim();
 
-    const bannerY = 8;
-    const bannerHeight = 20;
+    const headerTop = 8;
+    const headerBottom = 30;
     const bannerW = pageWidth - margin * 2;
-    const thirdW = bannerW / 3;
 
-    doc.setFillColor(30, 41, 59);
-    doc.rect(margin, bannerY, bannerW, bannerHeight, 'F');
-    doc.setFillColor(accentR, accentG, accentB);
-    doc.rect(margin, bannerY + bannerHeight - 0.8, bannerW, 0.8, 'F');
+    doc.setDrawColor(accentR, accentG, accentB);
+    doc.setLineWidth(2.5);
+    doc.line(margin + 1, headerTop, margin + 1, headerBottom);
 
-    setFont('normal', 5.5);
-    doc.setTextColor(148, 163, 184);
-    doc.text('EMPLOYER', margin + 4, bannerY + 6.5);
+    doc.setDrawColor(220, 220, 220);
+    doc.setLineWidth(0.3);
+    doc.line(margin, headerBottom, pageWidth - margin, headerBottom);
+
+    doc.setTextColor(accentR, accentG, accentB);
+    setFont('bold', 16);
+    doc.text((pdfConfig?.title || 'SIGNALLING LOGBOOK').toUpperCase(), margin + 5, 18);
+
+    setFont('normal', 7);
+    doc.setTextColor(100, 100, 100);
+    doc.text(log.employer || 'N/A', margin + 5, 24);
+
+    doc.setTextColor(accentR, accentG, accentB);
     setFont('bold', 10);
-    doc.setTextColor(255, 255, 255);
-    const employerLines = doc.splitTextToSize(log.employer || 'N/A', thirdW - 8);
-    doc.text(employerLines, margin + 4, bannerY + 12.5);
-
-    setFont('bold', 10);
-    const titleLines = doc.splitTextToSize((pdfConfig?.title || 'SIGNALLING LOGBOOK').toUpperCase(), thirdW - 4);
-    doc.text(titleLines, pageWidth / 2, bannerY + 11.5, { align: 'center' });
-
-    setFont('normal', 5.5);
-    doc.setTextColor(148, 163, 184);
-    doc.text('LOG NUMBER', pageWidth - margin - 4, bannerY + 6.5, { align: 'right' });
-    setFont('bold', 11);
-    doc.setTextColor(255, 255, 255);
-    doc.text(log.logNumber || 'N/A', pageWidth - margin - 4, bannerY + 13.5, { align: 'right' });
+    doc.text(`LOG #: ${log.logNumber || 'N/A'}`, pageWidth - margin, 18, { align: 'right' });
 
     autoTable(doc, {
-      startY: bannerY + bannerHeight + 1.5,
+      startY: headerBottom + 1.5,
       body: [[
         {
           content: `Work Experience Record Period:  ${log.quarter ? log.quarter + ': ' : ''}${log.startDate} – ${log.endDate}`,
