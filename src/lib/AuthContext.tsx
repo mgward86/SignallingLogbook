@@ -1,5 +1,17 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged, signInWithPopup, signInWithCredential, GoogleAuthProvider, signOut } from 'firebase/auth';
+import {
+  User,
+  onAuthStateChanged,
+  signInWithPopup,
+  signInWithCredential,
+  GoogleAuthProvider,
+  signOut,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+  sendEmailVerification,
+  updateProfile as updateFirebaseAuthProfile,
+} from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { auth, db, removeUndefinedProperties } from './firebase';
@@ -51,6 +63,10 @@ interface AuthContextType {
   signingIn: boolean;
   authError: string | null;
   signIn: () => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (email: string, password: string, displayName: string) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  clearAuthError: () => void;
   logOut: () => Promise<void>;
   updateProfile: (data: Partial<UserProfile>) => Promise<void>;
 }
@@ -169,6 +185,90 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Maps Firebase email/password auth error codes to user-facing messages.
+  // Shared by signInWithEmail, signUpWithEmail, and resetPassword below.
+  const getEmailAuthErrorMessage = (error: any): string => {
+    const code = error?.code;
+    switch (code) {
+      case 'auth/invalid-email':
+        return 'Please enter a valid email address.';
+      case 'auth/missing-email':
+        return "Please enter your email address first, then click 'Forgot password?' again.";
+      case 'auth/missing-password':
+        return 'Please enter a password.';
+      case 'auth/email-already-in-use':
+        return 'An account already exists with that email. Try signing in instead.';
+      case 'auth/weak-password':
+        return 'Password is too weak. Please use at least 6 characters.';
+      case 'auth/user-not-found':
+      case 'auth/wrong-password':
+      case 'auth/invalid-credential':
+        return 'Incorrect email or password. Please try again.';
+      case 'auth/too-many-requests':
+        return 'Too many attempts. Please wait a moment and try again.';
+      case 'auth/operation-not-allowed':
+        return 'Email/password sign-in is not yet enabled for this app. Please contact your administrator.';
+      default:
+        return error?.message || 'Authentication failed. Please try again.';
+    }
+  };
+
+  const signInWithEmail = async (email: string, password: string) => {
+    if (signingIn) return;
+    setSigningIn(true);
+    setAuthError(null);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error: any) {
+      console.error('Email Sign-In Error:', error);
+      setAuthError(getEmailAuthErrorMessage(error));
+    } finally {
+      setSigningIn(false);
+    }
+  };
+
+  const signUpWithEmail = async (email: string, password: string, displayName: string) => {
+    if (signingIn) return;
+    setSigningIn(true);
+    setAuthError(null);
+    try {
+      const credential = await createUserWithEmailAndPassword(auth, email, password);
+      if (displayName) {
+        // Best-effort: sets the Auth profile's display name so the
+        // Firestore profile-creation logic above (onAuthStateChanged) picks
+        // it up. If it's ever blank due to a race, the user can still set
+        // it in their profile settings afterwards.
+        try {
+          await updateFirebaseAuthProfile(credential.user, { displayName });
+        } catch (nameError) {
+          console.warn('Failed to set display name on sign-up:', nameError);
+        }
+      }
+      // Fire-and-forget: don't block account creation on the verification email.
+      sendEmailVerification(credential.user).catch((verifyError) => {
+        console.warn('Failed to send verification email:', verifyError);
+      });
+    } catch (error: any) {
+      console.error('Email Sign-Up Error:', error);
+      setAuthError(getEmailAuthErrorMessage(error));
+    } finally {
+      setSigningIn(false);
+    }
+  };
+
+  const resetPassword = async (email: string) => {
+    setAuthError(null);
+    try {
+      await sendPasswordResetEmail(auth, email);
+    } catch (error: any) {
+      console.error('Password Reset Error:', error);
+      setAuthError(getEmailAuthErrorMessage(error));
+      throw error;
+    }
+  };
+
+  const clearAuthError = () => setAuthError(null);
+
   const logOut = async () => {
     setAuthError(null);
     if (Capacitor.isNativePlatform()) {
@@ -194,7 +294,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signingIn, authError, signIn, logOut, updateProfile }}>
+    <AuthContext.Provider value={{ user, profile, loading, signingIn, authError, signIn, signInWithEmail, signUpWithEmail, resetPassword, clearAuthError, logOut, updateProfile }}>
       {children}
     </AuthContext.Provider>
   );
