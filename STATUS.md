@@ -63,6 +63,7 @@ This machine had **no Git, Node.js, or Firebase CLI** and the repo only existed 
 - Cloned the repo to `c:\Users\mgwar\Documents\Signalling Logbook`.
 - `npm install` run; all subsequent changes verified with `tsc --noEmit` and `vite build` before committing.
 - Git pushes to `main` require explicit approval each time (protected-branch write) — this has been happening via an approval prompt per push.
+- **Follow-up session:** `node`/`npm`/`git` briefly stopped resolving in the shell even though installed — root cause was that the Cursor app process itself had launched *before* the earlier `winget` installs updated the system `PATH`, so it (and every terminal spawned inside it) kept inheriting a stale environment snapshot. The registry `PATH` was already correct; a full quit-and-relaunch of Cursor (not just "Reload Window") fixed it permanently — confirmed working in the following session with no workaround needed.
 
 ## 6. Completed work
 
@@ -104,18 +105,25 @@ Once you've done steps 1–3 above and have access to Android Studio and/or a Ma
 - Attached the custom domain `signallinglogbook.com` and `www.signallinglogbook.com`. DNS was already correctly pointed at Vercel (GoDaddy `A` record → `76.76.21.21`), so no propagation wait was needed.
 - Configured `www` → apex redirect (permanent, 308) via the Vercel project-domains API (`redirect`/`redirectStatusCode` fields) — more reliable than a `vercel.json` host-conditional redirect, which is known to be flaky over HTTPS.
 - Verified both `https://signallinglogbook.com` (200) and `https://www.signallinglogbook.com` (308 → apex) live.
-- **Follow-up still needed:** add `signallinglogbook.com` to Firebase Authentication's authorized domains list (Console → Authentication → Settings → Authorized domains) — otherwise `signInWithPopup` on the Web build will be blocked on the new custom domain. Not yet done.
+- **Follow-up still needed:** add `signallinglogbook.com` to Firebase Authentication's authorized domains list (Console → Authentication → Settings → Authorized domains) — otherwise `signInWithPopup` on the Web build will be blocked on the new custom domain. **Confirmed still outstanding** — the user hit exactly this (`auth/unauthorized-domain`) trying to sign in on the live site; walked them to Firebase Console → Authentication → Settings → Authorized domains (note: their project is labelled "Default Gemini Project" in the console UI — same project, ID `gen-lang-client-0452980140`, just an AI-Studio-assigned display name) → confirm they add `signallinglogbook.com`. **Not yet confirmed done.**
+- Separately, explained (no code change) how the Google OAuth consent-screen popup's "to continue to gen-lang-client-0452980140.firebaseapp.com" text can be rebranded to show "Railway Signalling Logbook" instead, via Google Cloud Console → OAuth consent screen (App name/logo/Authorized domains) — optional, cosmetic, not started.
 
-### 🟡 Landing page redesign + Email/Password auth (this session, code done — blocked on one Firebase Console toggle)
-- Landing page copy updated per user markup: tagline → "Professional Digital Signalling Experience Record Keeping", removed the SOP Compliance/Real-time Logging/Audit Ready feature list, removed the "Authorised personnel only..." footer.
+### 🟡 Landing page redesign + Email/Password auth (commit `7a7a562` deployed; `0931724` code done, not yet deployed)
+- Landing page copy updated per user markup (commit `7a7a562`): tagline → "Professional Digital Signalling Record Keeping" (then further revised to "...Experience Record Keeping" per follow-up), removed the SOP Compliance/Real-time Logging/Audit Ready feature list, removed the "Authorised personnel only..." footer, simplified the Google button label to "Sign in". **Deployed to `signallinglogbook.com` production** via `npx vercel --prod --scope matt-ward1` (the initial attempt failed with a scope-resolution `Not authorized` error from the Vercel CLI; passing `--scope matt-ward1` explicitly fixed it).
 - **User raised a concern:** the app only supported Google Sign-In, and they were uncomfortable with users being limited to needing a Google Account (note: not literally restricted to `@gmail.com` — any Google Account works, including Google Workspace accounts on a custom domain — but it does exclude anyone without a Google Account at all, e.g. org uses Microsoft 365 only). Also, Google's brand guidelines require the "G" logo whenever Google OAuth is used, so it can't just be hidden while keeping Google as the only method.
-- **Decision (user-selected):** added **Email/Password** as a second sign-in method alongside Google, rather than replacing Google.
+- **Decision (user-selected):** added **Email/Password** as a second sign-in method alongside Google, rather than replacing Google (commit `0931724`, also carries the "...Experience Record Keeping" tagline revision).
 - `AuthContext.tsx`: added `signInWithEmail()`, `signUpWithEmail()` (also sets the Auth display name + fires a best-effort verification email via `sendEmailVerification`), `resetPassword()`, and `clearAuthError()`. All reuse the existing `onAuthStateChanged` → Firestore profile-creation logic, so behaviour is identical to Google once signed in. Added a `getEmailAuthErrorMessage()` mapper for common codes (`email-already-in-use`, `weak-password`, `invalid-credential`, `operation-not-allowed`, etc.).
 - `Landing.tsx`: rebuilt with a Google button ("Continue with Google") + divider + an Email/Password form that toggles between **Sign in** and **Create account** modes (full name field only shown in sign-up), a password visibility toggle, and a "Forgot password?" link wired to `resetPassword()`.
 - `firestore.rules` / `firebase.ts` needed **no changes** — rules only check `request.auth != null` and uid ownership (no provider-specific or `emailVerified` gating), and `auth` is a single shared instance regardless of provider, so this works identically on native (Capacitor) and Web without extra plugin work.
 - Verified: `tsc --noEmit` and `vite build` pass; visually verified both Sign in and Create account form states in a live dev-server browser check.
 - **Blocked on you:** Email/Password is not yet enabled in the Firebase Console — until you do, email/password attempts will fail with a handled `auth/operation-not-allowed` error (friendly message shown, but it won't actually work). Enable it at **Firebase Console → project `gen-lang-client-0452980140` → Authentication → Sign-in method → Email/Password → Enable**. No redeploy needed after that.
-- **Not yet deployed to Vercel production** — code is committed but pending your OK to `npx vercel --prod` (or ask me to do it).
+- **Commit `0931724` (email/password auth) is not yet deployed to Vercel production** — only `7a7a562` (the copy-only pass) was deployed so far. Pending your OK to run `npx vercel --prod --scope matt-ward1` again (or ask me to do it).
+
+### 🟡 Default config data review (this session, in progress with you)
+- You asked for a way to review/edit every shared "database" (Firestore `config/main` list) and its coded fallback defaults, to hand back for me to apply.
+- Generated `Default_Config_Template.xlsx` (repo root, **not committed** — it's a working deliverable, not app code) with one sheet per list: Equipment Categories (54 rows), Work Types (11), Quick Parts (6, with HTML descriptions flattened to plain "- bullet" text for editing), Approving Supervisors (3), Simple Lists (Clients/Employers/Infrastructure Owners/Roles/Locations/Projects side-by-side — only Clients ships with defaults today), and Settings (log numbering prefix/start/enabled, quarter format). Built with a throwaway `scripts/generate-defaults-template.cjs` (also uncommitted) via a temporary `npm install --no-save xlsx` — `package.json`/lockfile untouched.
+- Important clarification given: these lists are a single **org-wide shared Firestore doc**, not per-user — editing the template changes what a brand-new deployment/reset config starts with (and the coded fallbacks in `constants.ts`/`useConfig.ts`), not per-individual-user defaults.
+- **Waiting on you:** fill in `Default_Config_Template.xlsx` and send it back. Once returned, I'll update `src/constants.ts` and `src/hooks/useConfig.ts`, and can optionally push the same values live to the production `config/main` Firestore document if you want that too.
 
 ### ✅ Phase 3 — PDF/file export adaptation (this session)
 - **Problem:** `jspdf`'s `doc.save()` triggers a browser download, which does nothing useful inside a Capacitor native WebView sandbox; likewise the Web Share API (`navigator.share`) used for the app's "Share" buttons isn't reliably available natively.
@@ -198,12 +206,15 @@ Google Play Console account created + app listing walkthrough in progress. Apple
 
 ## 8. Immediate next step
 
-Phase 3 is now done. Everything else currently actionable on this machine without you is essentially done or blocked on you. Open items, roughly in priority order:
+Phase 3 is done; the landing page redesign and Email/Password auth are code-complete and partly deployed. Open items, roughly in priority order:
 
-1. **You:** add Android/iOS apps in the Firebase Console + place `google-services.json` / `GoogleService-Info.plist` (Phase 2, §6) so native Google Sign-In can eventually be tested.
-2. **You:** add `signallinglogbook.com` to Firebase Auth's authorized domains (quick, unblocks Web sign-in on the custom domain).
-3. **You:** resolve the Apple Developer Program enrollment error at `developer.apple.com/account`, and keep progressing the Google Play Console app listing.
-4. **Me, next:** **Phase 4 (push notifications / OneSignal)** doesn't depend on any of the above and can proceed now, though it will eventually need a OneSignal account (not urgent until the certificate-upload step) and, for real end-to-end testing, a Cloud Functions deploy + device access.
-5. Longer-term: Phase 7/8 (device testing, store submission) are blocked on Android Studio/SDK and a Mac+Xcode, neither present on this machine.
+1. **You:** add `signallinglogbook.com` to Firebase Auth's authorized domains (Console → Authentication → Settings → Authorized domains) — **confirmed still blocking Web sign-in**, the user hit this live as `auth/unauthorized-domain`.
+2. **You:** enable **Email/Password** as a sign-in provider (Console → Authentication → Sign-in method) — required for the new email/password form on the landing page to actually work; it's already coded and deployed-pending.
+3. **You:** fill in and return `Default_Config_Template.xlsx` (repo root) so I can update the app's default dropdown lists.
+4. **You:** add Android/iOS apps in the Firebase Console + place `google-services.json` / `GoogleService-Info.plist` (Phase 2, §6) so native Google Sign-In can eventually be tested.
+5. **You:** resolve the Apple Developer Program enrollment error at `developer.apple.com/account`, and keep progressing the Google Play Console app listing.
+6. **Me/you together:** deploy commit `0931724` (email/password auth + tagline update) to Vercel production — code is ready, just needs the go-ahead (and ideally #2 done first so it's fully functional once live).
+7. **Me, next:** **Phase 4 (push notifications / OneSignal)** doesn't depend on any of the above and can proceed now, though it will eventually need a OneSignal account (not urgent until the certificate-upload step) and, for real end-to-end testing, a Cloud Functions deploy + device access.
+8. Longer-term: Phase 7/8 (device testing, store submission) are blocked on Android Studio/SDK and a Mac+Xcode, neither present on this machine.
 
 A visual status board mapping all of this against a generic architecture diagram is at `BUILD_STATUS.html` (open directly in a browser) — regenerate/update it whenever a phase status changes materially.
