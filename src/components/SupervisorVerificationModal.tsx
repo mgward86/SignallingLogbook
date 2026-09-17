@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, ShieldCheck, Mail, Copy, Check, Lock, Send, Link, ExternalLink, QrCode, AlertCircle, FileText, XCircle, CheckCircle2 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { useAuth } from '../lib/AuthContext';
+import { DEFAULT_SUPERVISOR_DECLARATION, resolveHeaderStyle } from '../lib/pdfGenerator';
 
 interface SupervisorVerificationModalProps {
   log: any;
@@ -11,6 +13,7 @@ interface SupervisorVerificationModalProps {
 }
 
 export function SupervisorVerificationModal({ log, onClose, onSuccess }: SupervisorVerificationModalProps) {
+  const { profile } = useAuth();
   const [supervisorName, setSupervisorName] = useState(log.approvingSupervisor || '');
   const [supervisorRiw, setSupervisorRiw] = useState(log.approvingSupervisorRiw || '');
   const [supervisorEmail, setSupervisorEmail] = useState(log.verificationRequestedTo?.email || '');
@@ -64,6 +67,8 @@ export function SupervisorVerificationModal({ log, onClose, onSuccess }: Supervi
           email: supervisorEmail,
           riw: supervisorRiw
         },
+        pdfHeaderStyle: resolveHeaderStyle(profile?.pdfConfig?.headerStyle),
+        pdfSupervisorDeclaration: profile?.pdfConfig?.supervisorDeclaration || DEFAULT_SUPERVISOR_DECLARATION,
         auditTrail: newAudit,
         updatedAt: serverTimestamp()
       });

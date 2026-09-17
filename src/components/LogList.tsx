@@ -45,6 +45,9 @@ interface LogEntry {
   verificationSignedAt?: string;
   supervisorSignatureDataUrl?: string;
   supervisorComments?: string;
+  supervisorDeclaration?: string;
+  pdfHeaderStyle?: string;
+  pdfSupervisorDeclaration?: string;
   verificationHash?: string;
   isLocked?: boolean;
   auditTrail?: any[];

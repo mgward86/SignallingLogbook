@@ -26,6 +26,9 @@ export type PdfConfig = NonNullable<UserProfile['pdfConfig']>;
 
 export const APP_NAME = 'Railway Signalling Logbook';
 
+export const DEFAULT_SUPERVISOR_DECLARATION =
+  'I verify that the work described was performed safely and to industry standards.';
+
 export type HeaderStyle = 'accent-lines' | 'solid-banner' | 'bold-left' | 'condensed-table' | 'executive-pro';
 
 /** Maps stored/legacy header-style values (incl. old `jmdr-grid`) onto the current set. */
@@ -60,6 +63,7 @@ export interface PdfLogEntry {
   workType: string;
   workDescription: string;
   supervisorComments?: string;
+  supervisorDeclaration?: string;
   supervisorSignatureDataUrl?: string;
   verificationSignedAt?: string;
 }
@@ -120,7 +124,7 @@ export function contrastRatio(hexA: string, hexB: string): number {
  * a header style respect a setting it previously ignored, remove it here.
  */
 export const HEADER_STYLE_UNSUPPORTED_KEYS: Record<string, (keyof PdfConfig)[]> = {
-  'condensed-table': ['layoutSpacing', 'showEquipment', 'showCertificationDetails', 'showOwnerSignature'],
+  'condensed-table': ['layoutSpacing', 'showEquipment', 'showCertificationDetails', 'showOwnerSignature', 'showSupervisor', 'showSupervisorComments'],
   'executive-pro': ['showSupervisorComments'],
 };
 
@@ -128,6 +132,10 @@ export const HEADER_STYLE_UNSUPPORTED_KEYS: Record<string, (keyof PdfConfig)[]> 
 export const HEADER_STYLE_LOCKED_ORIENTATION: Record<string, 'portrait' | 'landscape'> = {
   'condensed-table': 'landscape',
 };
+
+export function resolveSupervisorDeclaration(log: PdfLogEntry, pdfConfig?: PdfConfig): string {
+  return (log.supervisorDeclaration || pdfConfig?.supervisorDeclaration || DEFAULT_SUPERVISOR_DECLARATION).trim();
+}
 
 export function resolveFamily(pdfConfig?: PdfConfig): 'helvetica' | 'times' | 'courier' {
   return pdfConfig?.fontFamily === 'times' ? 'times' : (pdfConfig?.fontFamily === 'courier' ? 'courier' : 'helvetica');
@@ -691,7 +699,7 @@ export function generateLogPage(
 
         setFont('normal', 6.5);
         doc.setTextColor(100, 116, 139);
-        const supDecLines = doc.splitTextToSize(pdfConfig?.supervisorDeclaration || 'I verify that the work described was performed safely and to industry standards.', cardWidth - 6);
+        const supDecLines = doc.splitTextToSize(resolveSupervisorDeclaration(log, pdfConfig), cardWidth - 6);
         doc.text(supDecLines, leftX + 3, currentY + 8);
 
         const commentsBoxY = currentY + 12;
@@ -842,20 +850,16 @@ export function generateLogPage(
       : 'N/A';
 
     const verifyParts: string[] = [];
-    if (pdfConfig?.showSupervisor !== false) {
-      if (log.approvingSupervisor) verifyParts.push(log.approvingSupervisor);
-      if (log.approvingSupervisorRiw) verifyParts.push(log.approvingSupervisorRiw);
-      if (log.verificationSignedAt) {
-        try {
-          verifyParts.push(format(new Date(log.verificationSignedAt), 'dd/MM/yyyy'));
-        } catch {
-          /* ignore unparseable dates */
-        }
+    if (log.approvingSupervisor) verifyParts.push(log.approvingSupervisor);
+    if (log.approvingSupervisorRiw) verifyParts.push(log.approvingSupervisorRiw);
+    if (log.verificationSignedAt) {
+      try {
+        verifyParts.push(format(new Date(log.verificationSignedAt), 'dd/MM/yyyy'));
+      } catch {
+        /* ignore unparseable dates */
       }
     }
     const verifyCell = verifyParts.length > 0 ? verifyParts.join('\n') : '—';
-
-    const showObservations = pdfConfig?.showSupervisorComments !== false;
     const observationsCell = (log.supervisorComments || '').trim() || '—';
 
     const headRow = [
@@ -865,7 +869,7 @@ export function generateLogPage(
       'Ref',
       'Equipment or System Types',
       'Verification Signature\n(Name & ID)',
-      ...(showObservations ? ['Supervisor Observations\n(Assessment / Ref)'] : [])
+      'Supervisor Observations\n(Assessment / Comments)'
     ];
     const bodyRow = [
       datesCell,
@@ -874,10 +878,10 @@ export function generateLogPage(
       log.logNumber || 'N/A',
       equipCell,
       verifyCell,
-      ...(showObservations ? [observationsCell] : [])
+      observationsCell
     ];
 
-    const obsW = showObservations ? 36 : 0;
+    const obsW = 36;
     const fixedW = 28 + 36 + 18 + 40 + 32 + obsW;
     const taskW = Math.max(50, pageWidth - margin * 2 - fixedW);
 
@@ -912,7 +916,7 @@ export function generateLogPage(
         3: { cellWidth: 18, halign: 'center', fontStyle: 'bold' },
         4: { cellWidth: 40 },
         5: { cellWidth: 32 },
-        ...(showObservations ? { 6: { cellWidth: obsW } } : {})
+        6: { cellWidth: obsW }
       }
     });
 
@@ -1257,7 +1261,7 @@ export function generateLogPage(
     lineY += 4.5;
     setFont('italic', 6.5);
     doc.setTextColor(148, 163, 184);
-    doc.text(pdfConfig?.supervisorDeclaration || 'I verify that the work described was performed safely and to industry standards.', col1X, lineY);
+    doc.text(resolveSupervisorDeclaration(log, pdfConfig), col1X, lineY);
   }
 }
 
@@ -1286,6 +1290,7 @@ export function buildSamplePdfLogEntry(overrides?: Partial<PdfLogEntry>): PdfLog
     workDescription:
       '<p>Tested signal interlocking mechanism at Location A. Verified contact pressure, relays, and power supply. Certified all signals are functioning safely and reliably.</p><ul><li>Audited construction documentation against as-built drawings</li><li>Performed signal sighting and focusing checks</li><li>Closed out final commissioning package</li></ul>',
     supervisorComments: 'Work reviewed and verified on site — no outstanding issues.',
+    supervisorDeclaration: DEFAULT_SUPERVISOR_DECLARATION,
     ...overrides
   };
 }

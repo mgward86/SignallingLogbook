@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ShieldCheck, Lock, CheckCircle2, XCircle, RefreshCw, PenTool, Eraser, AlertCircle, FileText, Calendar, MapPin, UserCheck, Search, Shield, Download, Check, X } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, query, where, getDocs, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { DeclarationQuickPartsBar } from './DeclarationQuickPartsBar';
+import { DEFAULT_SUPERVISOR_DECLARATION, resolveHeaderStyle } from '../lib/pdfGenerator';
 
 interface SupervisorPortalModalProps {
   initialToken?: string | null;
@@ -25,6 +27,7 @@ export function SupervisorPortalModal({ initialToken, onClose, onSuccess }: Supe
   const [supervisorName, setSupervisorName] = useState('');
   const [supervisorRiw, setSupervisorRiw] = useState('');
   const [supervisorComments, setSupervisorComments] = useState('');
+  const [supervisorDeclaration, setSupervisorDeclaration] = useState('');
   const [acceptedDeclaration, setAcceptedDeclaration] = useState(false);
   const [signatureType, setSignatureType] = useState<'draw' | 'type'>('draw');
   const [typedSignature, setTypedSignature] = useState('');
@@ -64,6 +67,9 @@ export function SupervisorPortalModal({ initialToken, onClose, onSuccess }: Supe
         setSupervisorName(data.approvingSupervisor || data.verificationRequestedTo?.name || '');
         setSupervisorRiw(data.approvingSupervisorRiw || data.verificationRequestedTo?.riw || '');
         setSupervisorComments(data.supervisorComments || '');
+        setSupervisorDeclaration(
+          data.supervisorDeclaration || data.pdfSupervisorDeclaration || DEFAULT_SUPERVISOR_DECLARATION
+        );
         if (!data.verificationPin) {
           setIsPinVerified(true);
         }
@@ -212,6 +218,9 @@ export function SupervisorPortalModal({ initialToken, onClose, onSuccess }: Supe
         }
       ];
 
+      const isCondensed = resolveHeaderStyle(log.pdfHeaderStyle) === 'condensed-table';
+      const declarationToSave = isCondensed ? supervisorComments : supervisorDeclaration;
+
       const logRef = doc(db, 'logEntries', log.id);
       await updateDoc(logRef, {
         approvingSupervisor: supervisorName,
@@ -220,6 +229,7 @@ export function SupervisorPortalModal({ initialToken, onClose, onSuccess }: Supe
         verificationSignedAt: signedAt,
         supervisorSignatureDataUrl: sigDataUrl,
         supervisorComments: supervisorComments,
+        supervisorDeclaration: declarationToSave,
         verificationHash: hashHex,
         isLocked: true,
         auditTrail: newAudit,
@@ -632,19 +642,64 @@ export function SupervisorPortalModal({ initialToken, onClose, onSuccess }: Supe
                 )}
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
-                    Supervisor Observations (Assessment / Ref)
-                  </label>
-                  <p className="text-[10px] text-gray-500 mb-1.5">
-                    This text is printed on the exported log in the Supervisor Observations column. Edit it as needed before signing.
-                  </p>
-                  <textarea
-                    rows={3}
-                    value={supervisorComments}
-                    onChange={(e) => setSupervisorComments(e.target.value)}
-                    placeholder="e.g. Competence cross-referenced and verified."
-                    className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-rail-blue outline-none"
-                  />
+                  {resolveHeaderStyle(log.pdfHeaderStyle) === 'condensed-table' ? (
+                    <>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                        Supervisor Observations (Assessment / Comments)
+                      </label>
+                      <p className="text-[10px] text-gray-500 mb-1.5">
+                        Printed in the Supervisor Observations column. Include any assessment notes and your certification wording.
+                      </p>
+                      <textarea
+                        rows={4}
+                        value={supervisorComments}
+                        onChange={(e) => setSupervisorComments(e.target.value)}
+                        placeholder="e.g. Competence cross-referenced and verified. I verify that the work described was performed safely and to industry standards."
+                        className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-rail-blue outline-none"
+                      />
+                      <div className="mt-2">
+                        <DeclarationQuickPartsBar
+                          riw={supervisorRiw}
+                          currentText={supervisorComments}
+                          onInsert={(text) => setSupervisorComments(prev => prev.trim() ? `${prev.trim()}\n${text}` : text)}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                        Supervisor Assessment Comments / Observations (Optional)
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={supervisorComments}
+                        onChange={(e) => setSupervisorComments(e.target.value)}
+                        placeholder="Add any specific assessment feedback or verification notes..."
+                        className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-rail-blue outline-none"
+                      />
+
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1 mt-3">
+                        Declaration Text
+                      </label>
+                      <p className="text-[10px] text-gray-500 mb-1.5">
+                        Printed on the exported log as your certification statement. Edit the default or insert a saved Quick Part.
+                      </p>
+                      <textarea
+                        rows={3}
+                        value={supervisorDeclaration}
+                        onChange={(e) => setSupervisorDeclaration(e.target.value)}
+                        placeholder={DEFAULT_SUPERVISOR_DECLARATION}
+                        className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-rail-blue outline-none"
+                      />
+                      <div className="mt-2">
+                        <DeclarationQuickPartsBar
+                          riw={supervisorRiw}
+                          currentText={supervisorDeclaration}
+                          onInsert={(text) => setSupervisorDeclaration(prev => prev.trim() ? `${prev.trim()}\n${text}` : text)}
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Compliance Checkbox */}

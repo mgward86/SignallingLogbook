@@ -132,6 +132,17 @@ export interface QuickPart {
   descriptionHtml: string;
 }
 
+export interface DeclarationQuickPart {
+  id: string;
+  label: string;
+  text: string;
+}
+
+/** Firestore document id for a certifier's personal declaration Quick Parts, keyed by RIW. */
+export function certifierQuickPartsDocId(riw: string): string {
+  return riw.trim().replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 128);
+}
+
 export const DEFAULT_QUICK_PARTS: QuickPart[] = [
   {
     id: 'commissioning',

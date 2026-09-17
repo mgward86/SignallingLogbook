@@ -65,6 +65,9 @@ service cloud.firestore {
              (data.get('verificationSignedAt', '') is string && data.get('verificationSignedAt', '').size() <= 64) &&
              (data.get('supervisorSignatureDataUrl', '') is string && data.get('supervisorSignatureDataUrl', '').size() <= 500000) &&
              (data.get('supervisorComments', '') is string && data.get('supervisorComments', '').size() <= 5000) &&
+             (data.get('supervisorDeclaration', '') is string && data.get('supervisorDeclaration', '').size() <= 5000) &&
+             (data.get('pdfHeaderStyle', '') is string && data.get('pdfHeaderStyle', '').size() <= 64) &&
+             (data.get('pdfSupervisorDeclaration', '') is string && data.get('pdfSupervisorDeclaration', '').size() <= 5000) &&
              (data.get('verificationHash', '') is string && data.get('verificationHash', '').size() <= 256) &&
              (data.get('isLocked', false) is bool);
     }
@@ -102,6 +105,18 @@ service cloud.firestore {
     match /config/{listId} {
       allow read: if isSignedIn();
       allow write: if isSignedIn() && (listId == 'main' && isValidConfig(incoming()));
+    }
+
+    // Personal declaration Quick Parts, keyed by certifier RIW (no login required —
+    // supervisors often sign via a verification link). Document id must be the
+    // sanitised RIW (letters, numbers, underscore, hyphen only).
+    match /certifierQuickParts/{riw} {
+      allow get: if isValidId(riw);
+      allow list: if false;
+      allow create, update: if isValidId(riw) &&
+        incoming().riw is string && incoming().riw.size() <= 128 &&
+        incoming().parts is list && incoming().parts.size() <= 50;
+      allow delete: if false;
     }
   }
 }

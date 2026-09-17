@@ -1191,7 +1191,9 @@ export function UserProfileForm() {
                     <ToggleSwitch
                       label="Supervisor Verification Panel"
                       description="Include a supervisor sign-off block with name, RIW ID, signature & date"
+                      disabledNote={`Not used by the ${activeHeaderStyleLabel} layout`}
                       checked={pdfConfig.showSupervisor}
+                      disabled={isSettingUnsupported('showSupervisor')}
                       onChange={(v) => setPdfConfig(c => ({ ...c, showSupervisor: v }))}
                     />
 
@@ -1205,13 +1207,19 @@ export function UserProfileForm() {
                         >
                           <ToggleSwitch
                             label="Supervisor Comments / Observations"
-                            description="Print the supervisor's comments (or observations, on Condensed Table) on the export"
-                            disabledNote={`Always shown in the ${activeHeaderStyleLabel} layout`}
+                            description="Print the supervisor's comments on the export"
+                            disabledNote={
+                              resolvedHeaderStyle === 'condensed-table'
+                                ? `Not used by the ${activeHeaderStyleLabel} layout`
+                                : `Always shown in the ${activeHeaderStyleLabel} layout`
+                            }
                             checked={pdfConfig.showSupervisorComments !== false}
                             disabled={isSettingUnsupported('showSupervisorComments')}
                             onChange={(v) => setPdfConfig(c => ({ ...c, showSupervisorComments: v }))}
                           />
 
+                          {resolvedHeaderStyle !== 'condensed-table' && (
+                            <>
                           <div className="space-y-1.5">
                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Panel Title</label>
                             <input
@@ -1224,6 +1232,7 @@ export function UserProfileForm() {
 
                           <div className="space-y-1.5">
                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Declaration Text</label>
+                            <p className="text-[10px] text-gray-400">Default wording the certifier can edit when they sign off.</p>
                             <textarea
                               rows={2}
                               value={pdfConfig.supervisorDeclaration}
@@ -1231,6 +1240,8 @@ export function UserProfileForm() {
                               className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs outline-none focus:ring-4 focus:ring-rail-blue/5 focus:border-rail-blue transition resize-none"
                             />
                           </div>
+                            </>
+                          )}
                         </motion.div>
                       )}
                     </AnimatePresence>
@@ -1379,9 +1390,7 @@ export function UserProfileForm() {
                                       <div className="col-span-1 border-r border-slate-200 p-0.5 flex items-center justify-center">Ref</div>
                                       <div className="col-span-2 border-r border-slate-200 p-0.5 text-left flex items-center">Equipment or System Types</div>
                                       <div className="col-span-1 border-r border-slate-200 p-0.5">Verification Signature<br/><span className="font-normal text-slate-400" style={fs(3)}>(Name &amp; ID)</span></div>
-                                      {pdfConfig.showSupervisorComments !== false && (
-                                        <div className="col-span-1 p-0.5">Supervisor Observations<br/><span className="font-normal text-slate-400" style={fs(3)}>(Assessment)</span></div>
-                                      )}
+                                      <div className="col-span-1 p-0.5">Supervisor Observations<br/><span className="font-normal text-slate-400" style={fs(3)}>(Assessment / Comments)</span></div>
                                     </div>
 
                                     <div className="grid grid-cols-12 bg-white text-slate-700">
@@ -1413,11 +1422,9 @@ export function UserProfileForm() {
                                         <div className="font-bold text-slate-900">David Miller</div>
                                         <div className="font-mono text-slate-500">8839210</div>
                                       </div>
-                                      {pdfConfig.showSupervisorComments !== false && (
-                                        <div className="col-span-1 p-1 text-slate-600">
+                                      <div className="col-span-1 p-1 text-slate-600">
                                           Work reviewed and verified on site — no outstanding issues.
                                         </div>
-                                      )}
                                     </div>
                                   </div>
                                 </div>
