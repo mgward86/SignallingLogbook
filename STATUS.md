@@ -32,14 +32,17 @@ A **digital work-logbook web app for railway signalling technicians/engineers**,
 | `components/Landing.tsx` | Sign-in screen |
 | `components/Nav.tsx` | Top nav |
 | `components/LogEntryForm.tsx` | Core work-log entry form (~96KB) |
-| `components/LogList.tsx` | Log history/search/PDF export (~85KB) |
-| `components/UserProfileForm.tsx` | Profile + PDF branding config (~95KB) |
-| `components/ConfigManager.tsx` | Admin: shared dropdown lists (~69KB) |
+| `components/LogList.tsx` | Log history/search/PDF export |
+| `components/UserProfileForm.tsx` | Profile + PDF branding config |
+| `components/ConfigManager.tsx` | Admin: shared dropdown lists |
 | `components/SupervisorPortalModal.tsx` / `SupervisorVerificationModal.tsx` | Digital sign-off workflow |
+| `components/DeclarationQuickPartsBar.tsx` | Certifier personal declaration Quick Parts (keyed by RIW) |
+| `lib/pdfGenerator.ts` | Single PDF drawing engine (all header styles + footers) |
+| `lib/pdfExport.ts` | Platform-aware PDF download/share (Web vs Capacitor) |
 | `hooks/useConfig.ts` / `useOnlineStatus.ts` | Firestore config subscription, network status |
 | `constants.ts` | Equipment categories, work types, quick-part templates, default supervisors |
 
-**Data model (Firestore):** `users/{userId}`, `logEntries/{logId}` (with `verificationStatus: draft → pending_verification → verified/rejected/cancelled`, `auditTrail[]`, `verificationHash`, `isLocked`), `config/main` (shared org-wide lists).
+**Data model (Firestore):** `users/{userId}`, `logEntries/{logId}` (with `verificationStatus: draft → pending_verification → verified/rejected/cancelled`, `auditTrail[]`, `verificationHash`, `isLocked`, `supervisorComments`, `supervisorDeclaration`, `pdfHeaderStyle` stamped at verification request), `config/main` (shared org-wide lists), `certifierQuickParts/{riw}` (personal declaration snippets, no login required).
 
 Full field-level schema is in `PROJECT_OVERVIEW.md`.
 
@@ -129,13 +132,31 @@ Once you've done steps 1–3 above and have access to Android Studio and/or a Ma
 ### ✅ PDF customiser UX overhaul (commit `d54af6c`, deployed)
 - You asked for a review of the PDF-export customisation feature against UX best practice, then to implement every suggestion, highest priority first. Full rework of `UserProfileForm.tsx`'s "Customise PDF Export Template" modal plus a structural fix underneath it:
   1. **Fixed a real WYSIWYG-drift bug:** the customiser's live preview was a hand-built CSS approximation, separate from the actual `jsPDF` export code in `LogList.tsx` — the two could (and did) drift out of sync. Extracted the entire PDF-drawing engine into a new shared module, **`src/lib/pdfGenerator.ts`** (`createPdfInstance`, `generateLogPage`, `addDocumentFooters`, plus colour/contrast helpers), and pointed both `LogList.tsx`'s real exports and a new **"Preview Real PDF"** button (generates the exact file from your in-progress, unsaved settings against a sample entry, opened in a new tab / native share sheet) at the same code. Only one implementation to keep correct now.
-  2. Settings that a given header style silently ignored (e.g. the Competency Grid/JMDR layout ignoring the Equipment/Certification/Owner-Signature toggles and always forcing landscape) are now greyed out in the UI with an inline reason, instead of appearing to do nothing.
+  2. Settings that a given header style silently ignored (e.g. Condensed Table ignoring the Equipment/Certification/Owner-Signature/Supervisor-panel toggles and always forcing landscape) are now greyed out in the UI with an inline reason, instead of appearing to do nothing.
   3. Added dirty-state tracking with confirm-before-discard (closing via X/backdrop/Cancel/Escape with unsaved changes) and confirm-before-reset (two-step, was previously a silent one-click wipe).
   4. Added hex-colour validation (rejects malformed codes with a fallback) and a WCAG-luminance contrast warning when the chosen accent colour is too pale to read reliably.
   5. Restructured the single long scrolling form into **Design / Layout / Content & Signatures** tabs (progressive disclosure).
   6. Copy tightening pass (shorter labels) plus an accessibility pass: `role="dialog"`/`aria-modal` on the modal, `role="switch"`/`aria-checked` + a shared `ToggleSwitch` component for all toggles, `aria-label`s on icon-only buttons, Escape-key support.
 - Verified with `tsc --noEmit` and `vite build` (both clean) before committing.
 - **Deployed:** committed as `d54af6c`, pushed to `origin/main`, and shipped to `signallinglogbook.com` via `npx vercel --prod --scope matt-ward1` — confirmed live.
+
+### ✅ Condensed Table PDF layout (commits `68688a7`, `9396c48`, `af32189` — deployed)
+Replaced the old JMDR competency-grid template with a first-class **Condensed Table** layout, then iterated from annotated screenshots:
+
+1. **Rename / de-brand:** removed every user-facing "JMDR" label. Header style id is now `condensed-table` (legacy `jmdr-grid` still loads correctly). Picker order: **Condensed Table**, Executive Modern, Accent Lines, Left Accent Border. **Solid Banner** is hidden (still renders if an existing profile already has it saved). "Executive Modern Pro" shortened to **Executive Modern**.
+2. **Header content:** left side is the chosen **employer**; right side is the **log entry number** (no more hardcoded Version / Effective-from dates). Footer default across *all* layouts is **Railway Signalling Logbook** (was "Digital Signalling Logbook Exporter Pro"). Removed the Approving Manager / Approval Date / Next Review Date bar and the Metro intranet warning.
+3. **Visual style:** first pass used a dense navy banner; user asked it to match **Left Accent Border** instead (left accent stripe, title + employer, `LOG #` on the right). Then condensed vertical spacing (shorter header, tighter info strip and table padding) so the landscape grid sits shorter on the page.
+4. **Supervisor observations:** the observations column prints the certifier's `supervisorComments` (no longer a hardcoded "Competence cross-referenced and verified."). Column heading is **Supervisor Observations (Assessment / Comments)**. Verification Signature column uses the supervisor name/RIW, not the technician.
+5. **Customiser toggles:** Supervisor Verification Panel and Supervisor Comments are greyed out as **not used** on this layout (it has table columns, not a bottom sign-off box). Panel Title and Declaration Text are hidden here.
+
+**Deployed** as far as `af32189` (spacing tighten) to `signallinglogbook.com`. The certifier-declaration work below is **not yet committed or deployed**.
+
+### 🟡 Certifier-filled declaration + personal Quick Parts (this session, code complete, not deployed)
+- **Decision:** Declaration Text is filled out by the **certifier** at sign-off, not locked in as technician-only template copy. The PDF customiser field is kept as a **default** the certifier can edit (hidden on Condensed Table). Other layouts keep comments and declaration as separate fields; Condensed Table **combines** them into the observations column.
+- `SupervisorPortalModal.tsx`: other layouts get a Declaration Text area (pre-filled from the stamped default) plus comments; Condensed Table gets one combined observations field. `SupervisorVerificationModal.tsx` stamps `pdfHeaderStyle` and `pdfSupervisorDeclaration` onto the log when verification is requested so the (often unauthenticated) portal knows which form to show.
+- **Declaration Quick Parts** are **personal**, stored in Firestore `certifierQuickParts/{riw}` keyed by the certifier's RIW (no app login — supervisors typically sign via a verification link). UI: `DeclarationQuickPartsBar.tsx` — insert a saved phrase or "Save current". Caps at 50 parts.
+- PDF engine (`pdfGenerator.ts`) prints `log.supervisorDeclaration` when present, else the customiser default.
+- `firestore.rules` updated to allow the new log fields and the `certifierQuickParts` collection (get/create/update by sanitised RIW id, no auth). **These rules are not live until `firebase deploy --only firestore:rules` is run** — without that, Quick Parts writes will be denied.
 
 ### ✅ Phase 3 — PDF/file export adaptation (this session)
 - **Problem:** `jspdf`'s `doc.save()` triggers a browser download, which does nothing useful inside a Capacitor native WebView sandbox; likewise the Web Share API (`navigator.share`) used for the app's "Share" buttons isn't reliably available natively.
@@ -218,14 +239,15 @@ Google Play Console account created + app listing walkthrough in progress. Apple
 
 ## 8. Immediate next step
 
-Phase 3 is done; the landing page redesign, Email/Password auth, and the PDF customiser overhaul are all code-complete **and deployed** to `signallinglogbook.com`. Open items, roughly in priority order:
+Last **production** deploy is commit `af32189` (Condensed Table spacing). Certifier declaration + Quick Parts and the matching Firestore rules are **local only**. Open items, roughly in priority order:
 
-1. **You:** add `signallinglogbook.com` to Firebase Auth's authorized domains (Console → Authentication → Settings → Authorized domains) — **confirmed still blocking Web sign-in**, the user hit this live as `auth/unauthorized-domain`. Still not confirmed done.
-2. **You:** enable **Email/Password** as a sign-in provider (Console → Authentication → Sign-in method) — required for the email/password form on the landing page to actually work; it's live but will show a handled "not enabled" error until this is flipped on.
-3. **You:** fill in and return `Default_Config_Template.xlsx` (repo root) so I can update the app's default dropdown lists.
-4. **You:** add Android/iOS apps in the Firebase Console + place `google-services.json` / `GoogleService-Info.plist` (Phase 2, §6) so native Google Sign-In can eventually be tested.
-5. **You:** resolve the Apple Developer Program enrollment error at `developer.apple.com/account`, and keep progressing the Google Play Console app listing.
-6. **Me, next:** **Phase 4 (push notifications / OneSignal)** doesn't depend on any of the above and can proceed now, though it will eventually need a OneSignal account (not urgent until the certificate-upload step) and, for real end-to-end testing, a Cloud Functions deploy + device access.
-7. Longer-term: Phase 7/8 (device testing, store submission) are blocked on Android Studio/SDK and a Mac+Xcode, neither present on this machine.
+1. **Me / you:** commit, push, and `npx vercel --prod --scope matt-ward1` so the certifier declaration work goes live, **and** `firebase deploy --only firestore:rules` so `certifierQuickParts` and the new log fields are allowed. Do both together or Quick Parts will fail in production.
+2. **You:** add `signallinglogbook.com` to Firebase Auth's authorized domains (Console → Authentication → Settings → Authorized domains) — **confirmed still blocking Web sign-in**, the user hit this live as `auth/unauthorized-domain`. Still not confirmed done.
+3. **You:** enable **Email/Password** as a sign-in provider (Console → Authentication → Sign-in method) — required for the email/password form on the landing page to actually work; it's live but will show a handled "not enabled" error until this is flipped on.
+4. **You:** fill in and return `Default_Config_Template.xlsx` (repo root) so I can update the app's default dropdown lists.
+5. **You:** add Android/iOS apps in the Firebase Console + place `google-services.json` / `GoogleService-Info.plist` (Phase 2, §6) so native Google Sign-In can eventually be tested.
+6. **You:** resolve the Apple Developer Program enrollment error at `developer.apple.com/account`, and keep progressing the Google Play Console app listing.
+7. **Me, next engineering:** **Phase 4 (push notifications / OneSignal)** doesn't depend on the console items above and can proceed once the certifier work is shipped, though it will eventually need a OneSignal account (not urgent until the certificate-upload step) and, for real end-to-end testing, a Cloud Functions deploy + device access.
+8. Longer-term: Phase 7/8 (device testing, store submission) are blocked on Android Studio/SDK and a Mac+Xcode, neither present on this machine.
 
 A visual status board mapping all of this against a generic architecture diagram is at `BUILD_STATUS.html` (open directly in a browser) — regenerate/update it whenever a phase status changes materially.
