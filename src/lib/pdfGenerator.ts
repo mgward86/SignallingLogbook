@@ -255,7 +255,7 @@ export function generateLogPage(
         const startYY = month >= 6 ? year % 100 : (year - 1) % 100;
         const endYY = (startYY + 1) % 100;
         const pad = (n: number) => n.toString().padStart(2, '0');
-        fyPrefix = `FY${pad(startYY)}/${pad(endYY)}`;
+        fyPrefix = `FY${pad(startYY)}${pad(endYY)}`;
       }
     }
 
@@ -433,18 +433,7 @@ export function generateLogPage(
       .trim();
 
     const lines = plainTextDesc.split('\n').map(l => l.trim()).filter(Boolean);
-    const mainDescLines: string[] = [];
-    const activityItems: string[] = [];
-
-    for (const line of lines) {
-      if (line.startsWith('•') || line.startsWith('■') || line.startsWith('-') || line.match(/^\d+[\.\)]/)) {
-        activityItems.push(line.replace(/^[•■\-\d\.\)]\s*/, ''));
-      } else {
-        mainDescLines.push(line);
-      }
-    }
-
-    const descText = mainDescLines.join('\n');
+    const descText = lines.join('\n');
 
     if (descText) {
       autoTable(doc, {
@@ -500,55 +489,6 @@ export function generateLogPage(
         });
         currentY = (doc as any).lastAutoTable.finalY + 4;
       });
-    }
-
-    if (activityItems.length > 0) {
-      setFont('bold', 9);
-      doc.setTextColor(30, 41, 59);
-      doc.text('Activities carried out ', margin, currentY);
-      const actTitleWidth = doc.getTextWidth('Activities carried out ');
-
-      doc.setFillColor(accentR, accentG, accentB);
-      doc.rect(margin + actTitleWidth, currentY - 2.8, 14, 3.8, 'F');
-      setFont('bold', 6.5);
-      doc.setTextColor(255, 255, 255);
-      doc.text(`${activityItems.length} items`, margin + actTitleWidth + 1.8, currentY - 0.2);
-
-      currentY += 3.5;
-
-      const numCols = isLandscape ? 3 : 2;
-      const actTableBody: any[] = [];
-      for (let i = 0; i < activityItems.length; i += numCols) {
-        const row = [];
-        for (let c = 0; c < numCols; c++) {
-          const item = activityItems[i + c];
-          row.push(item ? `•  ${item}` : '');
-        }
-        actTableBody.push(row);
-      }
-
-      const colActWidth = (pageWidth - margin * 2) / numCols;
-      const actColStyles: any = {};
-      for (let c = 0; c < numCols; c++) {
-        actColStyles[c] = { cellWidth: colActWidth, valign: 'top' };
-      }
-
-      autoTable(doc, {
-        startY: currentY,
-        body: actTableBody,
-        theme: 'plain',
-        styles: {
-          fontSize: 7.5 * sizeMod,
-          cellPadding: { top: 1, bottom: 1.5, left: 1, right: 3 },
-          textColor: [51, 65, 85],
-          overflow: 'linebreak',
-          font: family
-        },
-        columnStyles: actColStyles,
-        margin: { left: margin, right: margin }
-      });
-
-      currentY = (doc as any).lastAutoTable.finalY + 5;
     }
 
     // --- SECTION 3: EQUIPMENT IDENTIFICATION ---
@@ -804,11 +744,13 @@ export function generateLogPage(
     setFont('bold', 9);
     doc.text(`LOG #: ${log.logNumber || 'N/A'}`, pageWidth - margin, 13.5, { align: 'right' });
 
+    const fyQuarterLabel = formatFyQuarter(log.quarter, log.startDate, log.endDate);
+
     autoTable(doc, {
       startY: headerBottom + 0.8,
       body: [[
         {
-          content: `Work Experience Record Period:  ${log.quarter ? log.quarter + ': ' : ''}${log.startDate} – ${log.endDate}`,
+          content: `Work Experience Record Period:  ${fyQuarterLabel !== 'N/A' ? fyQuarterLabel + ': ' : ''}${log.startDate} – ${log.endDate}`,
           styles: { textColor: [accentR, accentG, accentB] }
         },
         { content: `Name: ${profile?.displayName?.toUpperCase() || 'N/A'}` },
