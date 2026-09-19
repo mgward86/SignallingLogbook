@@ -67,6 +67,7 @@ This machine had **no Git, Node.js, or Firebase CLI** and the repo only existed 
 - `npm install` run; all subsequent changes verified with `tsc --noEmit` and `vite build` before committing.
 - Git pushes to `main` require explicit approval each time (protected-branch write) — this has been happening via an approval prompt per push.
 - **Follow-up session:** `node`/`npm`/`git` briefly stopped resolving in the shell even though installed — root cause was that the Cursor app process itself had launched *before* the earlier `winget` installs updated the system `PATH`, so it (and every terminal spawned inside it) kept inheriting a stale environment snapshot. The registry `PATH` was already correct; a full quit-and-relaunch of Cursor (not just "Reload Window") fixed it permanently — confirmed working in the following session with no workaround needed.
+- **Firebase CLI now set up (this session):** plain interactive `firebase login` crashes on this machine with a native libuv assertion (`Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c`) — a Windows-specific CLI bug, not a project issue. Workaround that works reliably: `firebase login --no-localhost`, then open the printed `https://auth.firebase.tools/login?...` URL (used the in-IDE browser tool to do this hands-free) and paste the resulting authorization code back into the CLI prompt. Logged in as `mgward86@gmail.com`. Added local-only `.firebaserc` (`default` project → `gen-lang-client-0452980140`) and `firebase.json` (multi-database array form, since this project's Firestore lives on a **named** database — `ai-studio-3660dd77-6f01-4cee-9cd4-5a3fa86b3647`, not `(default)`) so `firebase deploy --only firestore:<databaseId>` targets the right database. Both files are currently **untracked** — no secrets in them, safe to commit if you want them versioned.
 
 ## 6. Completed work
 
@@ -149,14 +150,25 @@ Replaced the old JMDR competency-grid template with a first-class **Condensed Ta
 4. **Supervisor observations:** the observations column prints the certifier's `supervisorComments` (no longer a hardcoded "Competence cross-referenced and verified."). Column heading is **Supervisor Observations (Assessment / Comments)**. Verification Signature column uses the supervisor name/RIW, not the technician.
 5. **Customiser toggles:** Supervisor Verification Panel and Supervisor Comments are greyed out as **not used** on this layout (it has table columns, not a bottom sign-off box). Panel Title and Declaration Text are hidden here.
 
-**Deployed** as far as `af32189` (spacing tighten) to `signallinglogbook.com`. The certifier-declaration work below is **not yet committed or deployed**.
+**Deployed** as far as `af32189` (spacing tighten) to `signallinglogbook.com`.
 
-### 🟡 Certifier-filled declaration + personal Quick Parts (this session, code complete, not deployed)
+### ✅ Web sign-in blockers cleared (this session)
+- **Authorized domains:** checked the live Firebase Auth config directly via the Identity Toolkit Admin API — `signallinglogbook.com` was already present in `authorizedDomains` (you'd added it since the last session), so the `auth/unauthorized-domain` issue is resolved. Also proactively added `www.signallinglogbook.com` to the same list (belt-and-suspenders): the Vercel `www → apex` 308 redirect means the SPA JS should never actually execute with `www` as the top-level origin, but `signInWithPopup`'s opener-origin check would fail with the exact same error if that redirect were ever bypassed (CDN cache edge case, a proxy that doesn't follow redirects, a future config change, etc.) — costs nothing to cover defensively.
+- **Email/Password provider:** confirmed enabled (`signIn.email.enabled: true` via the same API) — you'd already flipped this on. The email/password form on the landing page is fully functional in production now, not just deployed-but-gated.
+
+### ✅ "Activities carried out" removal + FY Quarter format fix (commit `ca76a3c`, deployed)
+- **Removed the "Activities carried out" print block** from every PDF layout. It used to auto-split bullet/numbered lines out of the Work Description rich text into a separately labelled, colour-badged section (`pdfGenerator.ts`). Per your request, that extraction and its dedicated rendering block are gone — bullet lines now just print inline as part of the normal Work Description paragraph, so no technician-entered content is lost, only the special heading/badge treatment.
+- **Fixed FY Quarter formatting:** the shared `formatFyQuarter()` helper now renders e.g. `FY2627 Q2` (concatenated years, no slash) instead of the old `FY26/27 Q2`.
+- **Fixed a real bug found in the same pass:** the **Condensed Table** layout's "Work Experience Record Period" line wasn't calling `formatFyQuarter()` at all — it printed the raw `quarter` field (e.g. bare `Q1`) with no FY prefix. It now goes through the same helper as every other layout, so all print layouts are consistent.
+- Verified with `tsc --noEmit` and `vite build` (both clean), committed as `ca76a3c`, pushed, and deployed to `signallinglogbook.com` via `npx vercel --prod --scope matt-ward1`.
+
+### ✅ Certifier-filled declaration + personal Quick Parts (commit `7897328`, deployed)
 - **Decision:** Declaration Text is filled out by the **certifier** at sign-off, not locked in as technician-only template copy. The PDF customiser field is kept as a **default** the certifier can edit (hidden on Condensed Table). Other layouts keep comments and declaration as separate fields; Condensed Table **combines** them into the observations column.
 - `SupervisorPortalModal.tsx`: other layouts get a Declaration Text area (pre-filled from the stamped default) plus comments; Condensed Table gets one combined observations field. `SupervisorVerificationModal.tsx` stamps `pdfHeaderStyle` and `pdfSupervisorDeclaration` onto the log when verification is requested so the (often unauthenticated) portal knows which form to show.
 - **Declaration Quick Parts** are **personal**, stored in Firestore `certifierQuickParts/{riw}` keyed by the certifier's RIW (no app login — supervisors typically sign via a verification link). UI: `DeclarationQuickPartsBar.tsx` — insert a saved phrase or "Save current". Caps at 50 parts.
 - PDF engine (`pdfGenerator.ts`) prints `log.supervisorDeclaration` when present, else the customiser default.
-- `firestore.rules` updated to allow the new log fields and the `certifierQuickParts` collection (get/create/update by sanitised RIW id, no auth). **These rules are not live until `firebase deploy --only firestore:rules` is run** — without that, Quick Parts writes will be denied.
+- `firestore.rules` updated to allow the new log fields and the `certifierQuickParts` collection (get/create/update by sanitised RIW id, no auth).
+- **Shipped this session:** committed (`7897328`), pushed, deployed to `signallinglogbook.com` via `npx vercel --prod --scope matt-ward1`, **and** the updated rules deployed with `firebase deploy --only firestore:<databaseId>` to the app's actual named Firestore database (see §5 Firebase CLI note) — confirmed live by reading back the released ruleset via the Firebase Rules REST API and checking it contains `certifierQuickParts` and `supervisorDeclaration`. Quick Parts writes now work in production.
 
 ### ✅ Phase 3 — PDF/file export adaptation (this session)
 - **Problem:** `jspdf`'s `doc.save()` triggers a browser download, which does nothing useful inside a Capacitor native WebView sandbox; likewise the Web Share API (`navigator.share`) used for the app's "Share" buttons isn't reliably available natively.
@@ -176,6 +188,7 @@ Replaced the old JMDR competency-grid template with a first-class **Condensed Ta
 - `resources/icon.png` / `resources/splash.png` are functional placeholders — replace with real branding and re-run `npx capacitor-assets generate` before store submission.
 - No Android Studio/SDK or Mac+Xcode on this machine yet, so the app hasn't been run on an emulator/simulator/device — only scaffolded and built.
 - `android/app/google-services.json` and `ios/App/App/GoogleService-Info.plist` don't exist yet (see Phase 2 above) — native Google Sign-In will not work until they're added. These files aren't secrets (like the already-committed `firebase-applet-config.json` web config) so it's fine to commit them once obtained.
+- `.firebaserc` and `firebase.json` (added this session, see §5) are currently **untracked** — no secrets, just project/database id mapping for the Firebase CLI. Fine to commit whenever convenient.
 
 ## 7. Plan for remaining phases
 
@@ -239,15 +252,17 @@ Google Play Console account created + app listing walkthrough in progress. Apple
 
 ## 8. Immediate next step
 
-Last **production** deploy is commit `af32189` (Condensed Table spacing). Certifier declaration + Quick Parts and the matching Firestore rules are **local only**. Open items, roughly in priority order:
+Last **production** deploy is commit `ca76a3c` ("Activities carried out" removal + FY Quarter fix). Certifier declaration + Quick Parts, both Web sign-in blockers, and the print-layout fixes are all **shipped and live** as of this session. Open items, roughly in priority order:
 
-1. **Me / you:** commit, push, and `npx vercel --prod --scope matt-ward1` so the certifier declaration work goes live, **and** `firebase deploy --only firestore:rules` so `certifierQuickParts` and the new log fields are allowed. Do both together or Quick Parts will fail in production.
-2. **You:** add `signallinglogbook.com` to Firebase Auth's authorized domains (Console → Authentication → Settings → Authorized domains) — **confirmed still blocking Web sign-in**, the user hit this live as `auth/unauthorized-domain`. Still not confirmed done.
-3. **You:** enable **Email/Password** as a sign-in provider (Console → Authentication → Sign-in method) — required for the email/password form on the landing page to actually work; it's live but will show a handled "not enabled" error until this is flipped on.
-4. **You:** fill in and return `Default_Config_Template.xlsx` (repo root) so I can update the app's default dropdown lists.
-5. **You:** add Android/iOS apps in the Firebase Console + place `google-services.json` / `GoogleService-Info.plist` (Phase 2, §6) so native Google Sign-In can eventually be tested.
-6. **You:** resolve the Apple Developer Program enrollment error at `developer.apple.com/account`, and keep progressing the Google Play Console app listing.
-7. **Me, next engineering:** **Phase 4 (push notifications / OneSignal)** doesn't depend on the console items above and can proceed once the certifier work is shipped, though it will eventually need a OneSignal account (not urgent until the certificate-upload step) and, for real end-to-end testing, a Cloud Functions deploy + device access.
-8. Longer-term: Phase 7/8 (device testing, store submission) are blocked on Android Studio/SDK and a Mac+Xcode, neither present on this machine.
+1. **You:** fill in and return `Default_Config_Template.xlsx` (repo root) so I can update the app's default dropdown lists.
+2. **You:** add Android/iOS apps in the Firebase Console + place `google-services.json` / `GoogleService-Info.plist` (Phase 2, §6) so native Google Sign-In can eventually be tested.
+3. **You:** resolve the Apple Developer Program enrollment error at `developer.apple.com/account`, and keep progressing the Google Play Console app listing.
+4. **Me, next engineering:** **Phase 4 (push notifications / OneSignal)** is now fully unblocked and can start any time — it will eventually need a OneSignal account (not urgent until the certificate-upload step) and, for real end-to-end testing, a Cloud Functions deploy + device access.
+5. Longer-term: Phase 7/8 (device testing, store submission) are blocked on Android Studio/SDK and a Mac+Xcode, neither present on this machine.
+
+### Recently closed out (this session)
+- Certifier declaration + Quick Parts: committed, pushed, deployed, Firestore rules deployed to the production database — confirmed live.
+- Firebase Auth authorized domains (`signallinglogbook.com` + `www.signallinglogbook.com`) and Email/Password provider — both confirmed enabled via direct API check.
+- "Activities carried out" print section removed; FY Quarter formatting fixed and made consistent across all layouts (including a real bug in Condensed Table that skipped the FY prefix entirely).
 
 A visual status board mapping all of this against a generic architecture diagram is at `BUILD_STATUS.html` (open directly in a browser) — regenerate/update it whenever a phase status changes materially.
