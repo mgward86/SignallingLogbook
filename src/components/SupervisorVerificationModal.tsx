@@ -26,6 +26,12 @@ export function SupervisorVerificationModal({ log, onClose, onSuccess }: Supervi
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isCancelled, setIsCancelled] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  // Tracks whether there's a currently-active (cancellable) request, independent of `generatedToken`.
+  // `generatedToken` mirrors `log.verificationToken`, which is intentionally never cleared on cancel
+  // (it's the log's own doc id and doubles as the Firestore access key so a cancelled portal link
+  // still resolves to a friendly "cancelled" screen) — so it stays truthy even for cancelled/verified
+  // requests and can't be used on its own to decide whether "Cancel Approval Request" should show.
+  const [hasActiveRequest, setHasActiveRequest] = useState(log.verificationStatus === 'pending_verification');
 
   const shareUrl = generatedToken
     ? `${window.location.origin}${window.location.pathname}?verifyToken=${generatedToken}`
@@ -79,6 +85,7 @@ export function SupervisorVerificationModal({ log, onClose, onSuccess }: Supervi
       });
 
       setGeneratedToken(newToken);
+      setHasActiveRequest(true);
       setActiveTab('share');
       onSuccess();
     } catch (err) {
@@ -110,6 +117,7 @@ export function SupervisorVerificationModal({ log, onClose, onSuccess }: Supervi
       });
 
       setIsCancelled(true);
+      setHasActiveRequest(false);
       setShowCancelConfirm(false);
       onSuccess();
       setTimeout(() => {
@@ -349,7 +357,7 @@ export function SupervisorVerificationModal({ log, onClose, onSuccess }: Supervi
                 </div>
               ) : (
                 <div className="pt-2 flex items-center justify-between">
-                  {(log.verificationStatus === 'pending_verification' || generatedToken) ? (
+                  {hasActiveRequest ? (
                     <button
                       type="button"
                       onClick={() => setShowCancelConfirm(true)}
@@ -495,7 +503,7 @@ export function SupervisorVerificationModal({ log, onClose, onSuccess }: Supervi
                 </div>
               ) : (
                 <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
-                  {(log.verificationStatus === 'pending_verification' || generatedToken) && (
+                  {hasActiveRequest && (
                     <button
                       type="button"
                       onClick={() => setShowCancelConfirm(true)}
