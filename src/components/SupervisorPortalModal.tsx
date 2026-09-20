@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ShieldCheck, Lock, CheckCircle2, XCircle, RefreshCw, PenTool, Eraser, AlertCircle, FileText, Calendar, MapPin, UserCheck, Search, Shield, Download, Check, X } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, query, where, getDocs, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { DeclarationQuickPartsBar } from './DeclarationQuickPartsBar';
 import { DEFAULT_SUPERVISOR_DECLARATION, resolveHeaderStyle } from '../lib/pdfGenerator';
 
@@ -52,17 +52,19 @@ export function SupervisorPortalModal({ initialToken, onClose, onSuccess }: Supe
     try {
       setLoading(true);
       setError(null);
-      const q = query(
-        collection(db, 'logEntries'),
-        where('verificationToken', '==', tokenToFind.trim())
-      );
-      const snapshot = await getDocs(q);
-      if (snapshot.empty) {
+      // The verification token is the Firestore document id (see SupervisorVerificationModal),
+      // so this is a direct get-by-id — the only lookup shape Firestore security rules can safely
+      // allow for an unauthenticated caller. A collection `where('verificationToken', ...)` query
+      // here would be a `list` operation, which is (correctly) blocked for anonymous users, since
+      // it can't be scoped to "only the document matching this exact caller-supplied value" —
+      // that shape of query would let anyone enumerate every pending/verified log entry.
+      const logId = tokenToFind.trim();
+      const snapshot = await getDoc(doc(db, 'logEntries', logId));
+      if (!snapshot.exists() || !snapshot.data()?.verificationToken) {
         setError('No log entry found matching this verification code/token.');
         setLog(null);
       } else {
-        const foundDoc = snapshot.docs[0];
-        const data: any = { id: foundDoc.id, ...foundDoc.data() };
+        const data: any = { id: snapshot.id, ...snapshot.data() };
         setLog(data);
         setSupervisorName(data.approvingSupervisor || data.verificationRequestedTo?.name || '');
         setSupervisorRiw(data.approvingSupervisorRiw || data.verificationRequestedTo?.riw || '');

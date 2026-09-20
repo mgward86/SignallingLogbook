@@ -41,7 +41,12 @@ export function SupervisorVerificationModal({ log, onClose, onSuccess }: Supervi
 
     try {
       setIsSubmitting(true);
-      const newToken = log.verificationToken || `verif_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      // The verification token IS the Firestore document id. This lets the (unauthenticated)
+      // supervisor portal fetch the log with a direct getDoc() — which Firestore security rules
+      // can safely allow for anyone who already knows the id — instead of a collection query,
+      // which would require a `list` rule that can't be scoped to a specific caller-supplied
+      // value without leaking every pending/verified log entry to any anonymous caller.
+      const newToken = log.id;
       const reqTimestamp = new Date().toISOString();
 
       const newAudit = [
