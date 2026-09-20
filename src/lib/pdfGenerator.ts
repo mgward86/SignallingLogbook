@@ -933,9 +933,7 @@ export function generateLogPage(
   const detailsBody = [
     [
       { content: 'Name:', styles: { fontStyle: 'bold', textColor: [71, 85, 105] } },
-      { content: certDetails, styles: { fontStyle: 'bold', textColor: [accentR, accentG, accentB] } },
-      { content: 'STATUS:', styles: { fontStyle: 'bold', textColor: [71, 85, 105] } },
-      { content: 'Certified & Recorded', styles: { fontStyle: 'bold', textColor: [16, 185, 129] } }
+      { content: certDetails, colSpan: 3, styles: { fontStyle: 'bold', textColor: [accentR, accentG, accentB] } }
     ],
     [
       { content: 'Date Range:', styles: { fontStyle: 'bold' } },

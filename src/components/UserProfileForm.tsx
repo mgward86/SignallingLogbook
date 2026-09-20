@@ -1517,9 +1517,8 @@ export function UserProfileForm() {
                         {/* Unified Executive Summary Card in settings preview */}
                         <div className={`text-left ${pdfConfig.layoutSpacing === 'compressed' ? 'space-y-1' : 'space-y-1.5'}`}>
                           <div className="border border-slate-200 rounded overflow-hidden shadow-xs bg-white text-left" style={fs(4.5)}>
-                            <div className="bg-slate-100 px-1.5 py-1 border-b border-slate-200 font-extrabold flex justify-between items-center" style={{ color: pdfConfig.accentColor || '#003057' }}>
+                            <div className="bg-slate-100 px-1.5 py-1 border-b border-slate-200 font-extrabold" style={{ color: pdfConfig.accentColor || '#003057' }}>
                               <span>LOG DETAILS & PERSONNEL RECORD</span>
-                              <span className="text-emerald-600 font-mono text-[8px]">Certified & Recorded</span>
                             </div>
                             <div className="p-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 font-sans leading-tight text-slate-700">
                               <div className="col-span-2 border-b border-slate-100 pb-0.5 mb-0.5 flex justify-between">
